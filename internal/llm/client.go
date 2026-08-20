@@ -1,21 +1,20 @@
 package llm
 
 import (
-	"context" // 序列化/反序列化
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
-
-	// 格式化 error
-	// 读响应体
-	"net/http" // 处理 URL 和 body
 	"time"
 )
 
 type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`   // user 消息携带
+	ToolCallID string     `json:"tool_call_id,omitempty"` // role 为 "tool" 的消息携带
 }
 
 type Client struct {
@@ -28,6 +27,7 @@ type Client struct {
 type chatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
+	Tools    []Tool    `json:"tools,omitempty"`
 }
 
 type chatResponse struct {
@@ -51,22 +51,24 @@ func NewClient(baseURL string, apiKey string,
 func (c *Client) Chat(
 	ctx context.Context,
 	messages []Message,
-) (string, error) {
+	tools []Tool,
+) (Message, error) {
 	payload := chatRequest{
 		Model:    c.Model,
 		Messages: messages,
+		Tools:    tools,
 	}
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return "", fmt.Errorf("marshal request: %w", err)
+		return Message{}, fmt.Errorf("marshal request: %w", err)
 	}
 
 	url := strings.TrimRight(c.BaseURL, "/") + "/chat/completions"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return Message{}, fmt.Errorf("create request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -74,28 +76,28 @@ func (c *Client) Chat(
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("http do: %w", err)
+		return Message{}, fmt.Errorf("http do: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read response body: %w", err)
+		return Message{}, fmt.Errorf("read response body: %w", err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
+		return Message{}, fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var result chatResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return "", fmt.Errorf("unmarshal response: %w", err)
+		return Message{}, fmt.Errorf("unmarshal response: %w", err)
 	}
 
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
+		return Message{}, fmt.Errorf("no choices in response")
 	}
 
-	return result.Choices[0].Message.Content, nil
+	return result.Choices[0].Message, nil
 }

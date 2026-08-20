@@ -2,3 +2,18 @@
 .env
 .env.local
 .env.*.local
+
+# Build output
+/go-agent
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Test coverage
+*.cover
+*.coverprofile
+coverage.txt
