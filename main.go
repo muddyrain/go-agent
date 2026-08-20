@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
+	"go-agent/internal/agent"
 	"go-agent/internal/llm"
 	"go-agent/internal/tool"
 
@@ -22,26 +25,40 @@ func main() {
 	modelID := os.Getenv("LLM_MODEL")
 	var model llm.Model = llm.NewClient(baseURL, apiKey, modelID)
 
-	registry := tool.NewRegistry()
-	registry.Register(&tool.TimeTool{})
-
-	messages := []llm.Message{
-		{Role: "user", Content: "用三句话介绍一下 Go 语言"},
-	}
-
-	ch, err := model.ChatStream(context.Background(), messages, nil)
-
+	// 获取当前项目main.go所在的目录作为工作目录
+	workDir, err := os.Getwd()
 	if err != nil {
-		fmt.Println("Error:", err)
+		fmt.Println("Error getting current working directory:", err)
 		return
 	}
-	fmt.Print("Agent: ")
-	for chunk := range ch {
-		if chunk.Err != nil {
-			fmt.Println("\nError:", chunk.Err)
-			return
+
+	registry := tool.NewRegistry()
+	registry.Register(&tool.TimeTool{})
+	registry.Register(&tool.ListDirTool{WorkDir: workDir})
+	registry.Register(&tool.ReadFileTool{WorkDir: workDir})
+	registry.Register(&tool.SearchCodeTool{WorkDir: workDir})
+
+	a := agent.New(model, registry, 10)
+
+	sm := agent.NewSessionManager()
+	session := sm.GetOrCreate("user-1")
+
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("You > ")
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			break
 		}
-		fmt.Print(chunk.Content)
+		input = strings.TrimSpace(input)
+		if input == "exit" || input == "quit" {
+			break
+		}
+		answer, err := a.Run(context.Background(), session, input)
+		if err != nil {
+			fmt.Println("Error:", err)
+			continue
+		}
+		fmt.Println("Agent:", answer)
 	}
-	fmt.Println()
 }
