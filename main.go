@@ -9,6 +9,7 @@ import (
 
 	"go-agent/internal/agent"
 	"go-agent/internal/llm"
+	"go-agent/internal/mcp"
 	"go-agent/internal/tool"
 
 	"github.com/joho/godotenv"
@@ -37,6 +38,33 @@ func main() {
 	registry.Register(&tool.ListDirTool{WorkDir: workDir})
 	registry.Register(&tool.ReadFileTool{WorkDir: workDir})
 	registry.Register(&tool.SearchCodeTool{WorkDir: workDir})
+
+	// 启动 MCP Server 子进程
+	mcpClient := &mcp.Client{}
+	if err := mcpClient.Start(context.Background(), "./mcp-server"); err != nil {
+		fmt.Println("Error: start mcp server:", err)
+		return
+	}
+	defer mcpClient.Close() // 程序退出时关闭子进程
+
+	// MCP 初始化握手
+	if err := mcpClient.Initialize(); err != nil {
+		fmt.Println("Error: mcp initialize:", err)
+		return
+	}
+
+	// 列出 MCP Server 提供的工具
+	mcpTools, err := mcpClient.ListTools()
+	if err != nil {
+		fmt.Println("Error: list mcp tools:", err)
+		return
+	}
+
+	// 把每个 MCP 工具包装后注册到 Registry
+	for _, info := range mcpTools {
+		registry.Register(tool.NewMCPTool(mcpClient, info))
+		fmt.Printf("已注册 MCP 工具: %s\n", info.Name)
+	}
 
 	a := agent.New(model, registry, 10)
 

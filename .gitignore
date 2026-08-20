@@ -5,6 +5,7 @@
 
 # Build output
 /go-agent
+/mcp-server
 *.exe
 *.exe~
 *.dll
