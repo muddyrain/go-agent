@@ -1,13 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
-	"go-agent/internal/agent"
 	"go-agent/internal/llm"
 	"go-agent/internal/tool"
 
@@ -28,29 +25,23 @@ func main() {
 	registry := tool.NewRegistry()
 	registry.Register(&tool.TimeTool{})
 
-	// 构造 Agent
-	a := agent.New(model, registry, 10) // 最多 10 轮
-
-	sm := agent.NewSessionManager()
-
-	session := sm.GetOrCreate("user-1")
-
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Print("You > ")
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-
-		if input == "exit" {
-			break
-		}
-
-		answer, err := a.Run(context.Background(), session, input)
-
-		if err != nil {
-			fmt.Println("Error:", err)
-			continue
-		}
-		fmt.Println("Agent:", answer)
+	messages := []llm.Message{
+		{Role: "user", Content: "用三句话介绍一下 Go 语言"},
 	}
+
+	ch, err := model.ChatStream(context.Background(), messages, nil)
+
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Print("Agent: ")
+	for chunk := range ch {
+		if chunk.Err != nil {
+			fmt.Println("\nError:", chunk.Err)
+			return
+		}
+		fmt.Print(chunk.Content)
+	}
+	fmt.Println()
 }
