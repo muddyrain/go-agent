@@ -24,7 +24,12 @@ func main() {
 		return
 	}
 	modelID := os.Getenv("LLM_MODEL")
-	var model llm.Model = llm.NewClient(baseURL, apiKey, modelID)
+	model, err := llm.NewEinoModelAdapter(context.Background(), baseURL, apiKey, modelID)
+
+	if err != nil {
+		fmt.Println("Error: create model:", err)
+		return
+	}
 
 	// 获取当前项目main.go所在的目录作为工作目录
 	workDir, err := os.Getwd()
