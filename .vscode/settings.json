@@ -3,6 +3,7 @@
     "AGENTHUB",
     "cloudwego",
     "Eino",
-    "godotenv"
+    "godotenv",
+    "mapstructure"
   ]
 }

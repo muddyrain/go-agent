@@ -10,6 +10,7 @@ import (
 type Config struct {
 	App    AppConfig    `mapstructure:"app"`
 	Server ServerConfig `mapstructure:"server"`
+	Log    LogConfig    `mapstructure:"log"`
 }
 
 type AppConfig struct {
@@ -20,6 +21,11 @@ type AppConfig struct {
 type ServerConfig struct {
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
+}
+
+type LogConfig struct {
+	Level  string `mapstructure:"level"`
+	Format string `mapstructure:"format"`
 }
 
 func Load(path string) (*Config, error) {
@@ -35,11 +41,16 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("server.host", "127.0.0.1")
 	v.SetDefault("server.port", 8080)
 
+	v.SetDefault("log.level", "info")
+	v.SetDefault("log.format", "text")
+
 	keys := []string{
 		"app.name",
 		"app.env",
 		"server.host",
 		"server.port",
+		"log.level",
+		"log.format",
 	}
 
 	for _, key := range keys {
@@ -75,6 +86,26 @@ func validate(cfg *Config) error {
 	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
 		return fmt.Errorf("server.port must be between 1 and 65535")
 	}
+
+	level := strings.ToLower(strings.TrimSpace(cfg.Log.Level))
+	format := strings.ToLower(strings.TrimSpace(cfg.Log.Format))
+
+	switch level {
+	case "debug", "info", "warn", "error":
+		// 合法，不需要做任何事
+	default:
+		return fmt.Errorf("log.level must be one of debug, info, warn, error")
+	}
+
+	switch format {
+	case "text", "json":
+		// 合法
+	default:
+		return fmt.Errorf("log.format must be one of text, json")
+	}
+
+	cfg.Log.Level = level
+	cfg.Log.Format = format
 
 	return nil
 }

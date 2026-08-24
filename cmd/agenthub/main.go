@@ -2,18 +2,36 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 
 	"agenthub/internal/config"
+	"agenthub/internal/logger"
 )
 
 func main() {
-	fmt.Println("AgentHub starting...")
-
 	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
-		fmt.Println("load config:", err)
+		slog.Error("load config failed", "error", err)
 		return
 	}
 
-	fmt.Printf("name=%s env=%s address=%s:%d\n", cfg.App.Name, cfg.App.Env, cfg.Server.Host, cfg.Server.Port)
+	log, err := logger.New(logger.Config{
+		Level:  cfg.Log.Level,
+		Format: cfg.Log.Format,
+	})
+	if err != nil {
+		slog.Error("create logger failed", "error", err)
+		return
+	}
+
+	slog.SetDefault(log) // 设置为全局默认日志器
+
+	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
+
+	log.Info(
+		"application starting",
+		"app", cfg.App.Name,
+		"env", cfg.App.Env,
+		"address", address,
+	)
 }
