@@ -4,6 +4,7 @@
 .env.*.local
 
 # Build output
+/agenthub
 /go-agent
 /mcp-server
 *.exe
