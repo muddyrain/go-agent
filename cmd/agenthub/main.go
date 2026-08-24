@@ -3,16 +3,28 @@ package main
 import (
 	"fmt"
 	"log/slog"
+	"os"
 
+	"agenthub/internal/apperr"
 	"agenthub/internal/config"
 	"agenthub/internal/logger"
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error(
+			"application failed",
+			"code", apperr.CodeOf(err),
+			"error", err,
+		)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	cfg, err := config.Load("configs/config.yaml")
 	if err != nil {
-		slog.Error("load config failed", "error", err)
-		return
+		return err
 	}
 
 	log, err := logger.New(logger.Config{
@@ -20,11 +32,14 @@ func main() {
 		Format: cfg.Log.Format,
 	})
 	if err != nil {
-		slog.Error("create logger failed", "error", err)
-		return
+		return apperr.Wrap(
+			apperr.CodeInternal,
+			"create logger",
+			err,
+		)
 	}
 
-	slog.SetDefault(log) // 设置为全局默认日志器
+	slog.SetDefault(log)
 
 	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
 
@@ -34,4 +49,6 @@ func main() {
 		"env", cfg.App.Env,
 		"address", address,
 	)
+
+	return nil
 }

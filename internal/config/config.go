@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"agenthub/internal/apperr"
+
 	"github.com/spf13/viper"
 )
 
@@ -55,21 +57,25 @@ func Load(path string) (*Config, error) {
 
 	for _, key := range keys {
 		if err := v.BindEnv(key); err != nil {
-			return nil, fmt.Errorf("bind env %s: %w", key, err)
+			return nil, apperr.Wrap(
+				apperr.CodeConfig,
+				fmt.Sprintf("bind env %s", key),
+				err,
+			)
 		}
 	}
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("read config: %w", err)
+		return nil, apperr.Wrap(apperr.CodeConfig, "read config", err)
 	}
 
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
-		return nil, fmt.Errorf("unmarshal config: %w", err)
+		return nil, apperr.Wrap(apperr.CodeConfig, "unmarshal config", err)
 	}
 
 	if err := validate(&cfg); err != nil {
-		return nil, fmt.Errorf("validate config: %w", err)
+		return nil, apperr.Wrap(apperr.CodeConfig, "validate config", err)
 	}
 	return &cfg, nil
 }
