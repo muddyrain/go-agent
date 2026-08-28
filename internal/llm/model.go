@@ -1,9 +1,14 @@
 package llm
 
-import "context"
+import (
+	"context"
+
+	"agenthub/internal/tool"
+)
 
 type Request struct {
 	Messages []Message
+	Tools    []tool.Definition
 }
 
 type Usage struct {

@@ -2,8 +2,12 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
+
+	"agenthub/internal/tool"
 )
 
 type fakeModel struct {
@@ -58,14 +62,22 @@ func TestModelGenerate(t *testing.T) {
 			SystemMessage("you are helpful"),
 			UserMessage("hello"),
 		},
+		Tools: []tool.Definition{
+			{
+				Name:        "echo",
+				Description: "returns the input",
+				Parameters: json.RawMessage(
+					`{"type":"object"}`,
+				),
+			},
+		},
 	}
-
 	gotResponse, err := model.Generate(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Generate() returned error: %v", err)
 	}
 
-	if gotResponse != wantResponse {
+	if !reflect.DeepEqual(gotResponse, wantResponse) {
 		t.Fatalf(
 			"Generate() response = %#v, want %#v",
 			gotResponse,
@@ -80,8 +92,24 @@ func TestModelGenerate(t *testing.T) {
 		)
 	}
 
-	if got, want := model.request.Messages[1], UserMessage("hello"); got != want {
+	if got, want := model.request.Messages[1], UserMessage("hello"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("second message = %#v, want %#v", got, want)
+	}
+
+	if got, want := len(model.request.Tools), 1; got != want {
+		t.Fatalf(
+			"Generate() received %d tools, want %d",
+			got,
+			want,
+		)
+	}
+
+	if got, want := model.request.Tools[0].Name, "echo"; got != want {
+		t.Fatalf(
+			"first tool name = %q, want %q",
+			got,
+			want,
+		)
 	}
 }
 
@@ -105,7 +133,7 @@ func TestModelGenerateError(t *testing.T) {
 		t.Fatalf("Generate() error = %v, want %v", err, wantErr)
 	}
 
-	if response != (Response{}) {
+	if !reflect.DeepEqual(response, Response{}) {
 		t.Fatalf("Generate() response = %#v, want zero value", response)
 	}
 }
@@ -125,7 +153,7 @@ func TestModelGenerateCancellation(t *testing.T) {
 		)
 	}
 
-	if response != (Response{}) {
+	if !reflect.DeepEqual(response, Response{}) {
 		t.Fatalf("Generate() response = %#v, want zero value", response)
 	}
 }

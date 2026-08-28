@@ -1,5 +1,11 @@
 package llm
 
+import (
+	"encoding/json"
+
+	"agenthub/internal/tool"
+)
+
 type Role string
 
 const (
@@ -14,6 +20,7 @@ type Message struct {
 	Content    string
 	Name       string
 	ToolCallID string
+	ToolCalls  []tool.Call
 }
 
 func SystemMessage(content string) Message {
@@ -44,4 +51,31 @@ func ToolMessage(name, toolCallID, content string) Message {
 		Name:       name,
 		ToolCallID: toolCallID,
 	}
+}
+
+func AssistantToolCalls(calls ...tool.Call) Message {
+	cloned := make([]tool.Call, len(calls))
+
+	for index, call := range calls {
+		call.Arguments = cloneRawMessage(call.Arguments)
+		cloned[index] = call
+	}
+
+	return Message{
+		Role:      RoleAssistant,
+		ToolCalls: cloned,
+	}
+}
+
+func cloneRawMessage(
+	message json.RawMessage,
+) json.RawMessage {
+	if message == nil {
+		return nil
+	}
+
+	cloned := make(json.RawMessage, len(message))
+	copy(cloned, message)
+
+	return cloned
 }

@@ -43,7 +43,7 @@
 | 课程 | 内容 | 交付物 | 状态 |
 |---|---|---|---|
 | 1.1 | Model 与 Message 抽象 | 模型接口和消息模型 | ✅ 已完成 |
-| 1.2 | Tool 系统 | Tool 接口、Registry、参数校验 | 🔄 进行中 |
+| 1.2 | Tool 系统 | Tool 接口、Registry、参数校验 | ✅ 已完成 |
 | 1.3 | Agent Loop | 模型—工具—结果闭环 | ⬜ 待开始 |
 | 1.4 | Memory | Token 预算、滑动窗口、摘要压缩 | ⬜ 待开始 |
 | 1.5 | Streaming | 统一同步/流式接口 | ⬜ 待开始 |
@@ -116,9 +116,9 @@
 
 ## 4. 当前进度
 
-- 当前课程：**1.2 Tool 系统**
-- 上一课程：**1.1 Model 与 Message 抽象，已完成**
-- 下一验收目标：定义 Tool 接口、工具调用结构、Registry 和参数校验
+- 当前课程：**1.3 Agent Loop，待开始**
+- 上一课程：**1.2 Tool 系统，已完成**
+- 下一验收目标：实现模型调用、工具执行、工具结果回传和最终回复的循环闭环
 
 ## 5. 验收记录
 
@@ -169,3 +169,11 @@
 - 产出：统一消息角色与构造函数、模型请求响应、Token 用量结构和 `Model` 接口
 - 验证：消息构造、模型成功响应、错误传播和 Context 取消测试全部通过；`internal/llm` 覆盖率 100%
 - 关键概念：自定义字符串类型、可比较结构体、隐式接口实现、编译期接口断言、指针方法集和 `context.Context`
+
+### 1.2 Tool 系统
+
+- 状态：✅ 已完成
+- 产出：Tool 定义与调用协议、函数式工具、并发安全 Registry、注册期 JSON Schema 编译、参数校验、Executor 错误分层，以及 Model/Message 的工具调用字段
+- 验证：`internal/tool` 与 `internal/llm` 单元测试、数据竞争检查和 `make check` 全部通过
+- 关键概念：接口扩展、函数类型与闭包、`sync.RWMutex`、防御性复制、JSON 语法与 Schema 校验、Context 错误传播、可变参数和深度比较
+- 下一步：进入 1.3，编写 Agent Loop，把 Model、Registry、Executor 与 Tool Message 串成完整闭环
