@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"agenthub/internal/llm"
+	"agenthub/internal/memory"
 	"agenthub/internal/tool"
 )
 
@@ -45,10 +46,12 @@ func newTestAgent(
 ) *Agent {
 	t.Helper()
 
+	mem, _ := memory.NewSimpleSliding(20)
 	agent, err := New(
 		model,
 		registry,
 		4,
+		mem,
 	)
 	if err != nil {
 		t.Fatalf(
@@ -837,10 +840,12 @@ func TestRunStopsAtMaximumSteps(t *testing.T) {
 		},
 	}
 
+	mem, _ := memory.NewSimpleSliding(20)
 	agent, err := New(
 		model,
 		registry,
 		2,
+		mem,
 	)
 	if err != nil {
 		t.Fatalf(
@@ -937,10 +942,12 @@ func TestNewValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mem, _ := memory.NewSimpleSliding(20)
 			agent, err := New(
 				tt.model,
 				tt.registry,
 				tt.maxSteps,
+				mem,
 			)
 
 			if err == nil {

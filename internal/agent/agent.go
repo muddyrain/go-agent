@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"agenthub/internal/llm"
+	"agenthub/internal/memory"
 	"agenthub/internal/tool"
 )
 
@@ -13,6 +14,7 @@ type Agent struct {
 	registry *tool.Registry
 	executor *tool.Executor
 	maxSteps int
+	memory   memory.Memory
 }
 
 type RunResult struct {
@@ -26,6 +28,7 @@ func New(
 	model llm.Model,
 	registry *tool.Registry,
 	maxSteps int,
+	mem memory.Memory,
 ) (*Agent, error) {
 	if model == nil {
 		return nil, fmt.Errorf("model is required")
@@ -37,6 +40,9 @@ func New(
 		return nil, fmt.Errorf(
 			"max steps must be greater than zero",
 		)
+	}
+	if mem == nil {
+		return nil, fmt.Errorf("memory is required")
 	}
 	executor, err := tool.NewExecutor(registry)
 	if err != nil {
@@ -51,6 +57,7 @@ func New(
 		registry: registry,
 		executor: executor,
 		maxSteps: maxSteps,
+		memory:   mem,
 	}, nil
 }
 
@@ -71,9 +78,15 @@ func (a *Agent) Run(
 
 	usage := llm.Usage{}
 	for step := 1; step <= a.maxSteps; step++ {
+		// memory 裁剪，不修改原始全量history
+		croppedMessages, err := a.memory.Apply(history)
+		if err != nil {
+			return RunResult{}, fmt.Errorf("memory apply: %w", err)
+		}
+
 		// 每轮模型调用
 		request := llm.Request{
-			Messages: history,
+			Messages: croppedMessages,
 			Tools:    a.registry.Definitions(),
 		}
 		response, err := a.model.Generate(
