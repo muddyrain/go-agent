@@ -7,11 +7,13 @@ import (
 	"strings"
 )
 
+// Function 将 Definition 与 Handler 组合为 Tool，适合无需单独结构体的轻量工具。
 type Function struct {
 	definition Definition
 	handler    Handler
 }
 
+// Handler 定义函数式工具的执行签名，使普通函数和闭包都能适配 Tool。
 type Handler func(
 	ctx context.Context,
 	arguments json.RawMessage,

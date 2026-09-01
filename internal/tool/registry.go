@@ -10,11 +10,13 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+// Registry 并发安全地维护工具及其已编译 Schema；读多写少场景使用 RWMutex。
 type Registry struct {
 	mu    sync.RWMutex
 	tools map[string]registeredTool
 }
 
+// registeredTool 将执行实现和注册时编译好的 Schema 绑定，避免每次调用重复编译。
 type registeredTool struct {
 	tool   Tool
 	schema *jsonschema.Schema
@@ -85,6 +87,7 @@ func (r *Registry) Definitions() []Definition {
 
 	for _, registered := range r.tools {
 		definition := registered.tool.Definition()
+		// 返回副本，避免调用者通过 Parameters 修改 Registry 持有的定义。
 		definition.Parameters = cloneRawMessage(
 			definition.Parameters,
 		)
@@ -95,6 +98,7 @@ func (r *Registry) Definitions() []Definition {
 		)
 	}
 
+	// map 遍历顺序不稳定，按名称排序以保证模型请求和测试结果可复现。
 	sort.Slice(
 		definitions,
 		func(i, j int) bool {

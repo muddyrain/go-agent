@@ -53,6 +53,7 @@ func (e *Executor) Execute(
 		)
 	}
 
+	// 参数不符合 Schema 属于模型可修正的调用错误，通过 Result 回传而不中断 Agent Loop。
 	if err := e.registry.Validate(
 		call.Name,
 		call.Arguments,
@@ -67,11 +68,13 @@ func (e *Executor) Execute(
 
 	content, err := registeredTool.Execute(ctx, call.Arguments)
 	if err != nil {
+		// 取消和超时属于流程控制信号，必须立即向上传播，不能包装成工具业务结果。
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, context.DeadlineExceeded) {
 			return Result{}, err
 		}
 
+		// 普通工具错误交给模型解释或重试，因此转换为 IsError Result。
 		return Result{
 			CallID:  call.ID,
 			Name:    call.Name,
