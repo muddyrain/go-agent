@@ -6,11 +6,13 @@ import (
 	"agenthub/internal/tool"
 )
 
+// Request 是一次模型调用的完整输入；Tools 只包含模型可见的工具定义，不包含本地执行实现。
 type Request struct {
 	Messages []Message
 	Tools    []tool.Definition
 }
 
+// Usage 记录单次模型调用的 Token 用量；Agent 多轮调用时会累加各轮 Usage。
 type Usage struct {
 	InputTokens  int
 	OutputTokens int
@@ -28,6 +30,7 @@ type Stream interface {
 	Close() error
 }
 
+// StreamingModel 在同步 Model 能力之上增加流式响应；调用方可通过类型断言按需使用。
 type StreamingModel interface {
 	Model
 
@@ -55,6 +58,7 @@ type StreamEvent struct {
 	Response Response
 }
 
+// Model 定义同步模型的最小能力，使 Agent 不依赖具体模型供应商或 SDK。
 type Model interface {
 	Generate(ctx context.Context, req Request) (Response, error)
 }

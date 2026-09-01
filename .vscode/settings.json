@@ -4,6 +4,8 @@
     "cloudwego",
     "Eino",
     "godotenv",
-    "mapstructure"
+    "jsonschema",
+    "mapstructure",
+    "santhosh"
   ]
 }
