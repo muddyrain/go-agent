@@ -24,6 +24,11 @@ type RunResult struct {
 	Usage        llm.Usage
 }
 
+type responseGenerator func(
+	ctx context.Context,
+	request llm.Request,
+) (llm.Response, error)
+
 func New(
 	model llm.Model,
 	registry *tool.Registry,
@@ -65,6 +70,24 @@ func (a *Agent) Run(
 	ctx context.Context,
 	messages []llm.Message,
 ) (RunResult, error) {
+	return a.runWithGenerator(
+		ctx,
+		messages,
+		a.model.Generate,
+	)
+}
+
+func (a *Agent) runWithGenerator(
+	ctx context.Context,
+	messages []llm.Message,
+	generate responseGenerator,
+) (RunResult, error) {
+	if generate == nil {
+		return RunResult{}, fmt.Errorf(
+			"response generator is required",
+		)
+	}
+
 	if len(messages) == 0 {
 		return RunResult{}, fmt.Errorf(
 			"messages are required",
@@ -89,7 +112,7 @@ func (a *Agent) Run(
 			Messages: croppedMessages,
 			Tools:    a.registry.Definitions(),
 		}
-		response, err := a.model.Generate(
+		response, err := generate(
 			ctx,
 			request,
 		)
@@ -164,5 +187,59 @@ func (a *Agent) Run(
 	return RunResult{}, fmt.Errorf(
 		"agent exceeded maximum steps: %d",
 		a.maxSteps,
+	)
+}
+
+func (a *Agent) RunStream(
+	ctx context.Context,
+	messages []llm.Message,
+	handler llm.StreamHandler,
+) (RunResult, error) {
+
+	if handler == nil {
+		return RunResult{}, fmt.Errorf(
+			"stream handler is required",
+		)
+	}
+
+	streamingModel, ok := a.model.(llm.StreamingModel)
+
+	if !ok {
+		return RunResult{}, fmt.Errorf(
+			"model does not support streaming",
+		)
+	}
+
+	return a.runWithGenerator(
+		ctx,
+		messages,
+		func(
+			ctx context.Context,
+			request llm.Request,
+		) (llm.Response, error) {
+			stream, err := streamingModel.Stream(
+				ctx,
+				request,
+			)
+			if err != nil {
+				return llm.Response{}, fmt.Errorf(
+					"start model stream: %w",
+					err,
+				)
+			}
+			response, err := llm.ConsumeStream(
+				stream,
+				handler,
+			)
+
+			if err != nil {
+				return llm.Response{}, fmt.Errorf(
+					"consume model stream: %w",
+					err,
+				)
+			}
+
+			return response, nil
+		},
 	)
 }
