@@ -6,22 +6,25 @@ import (
 	"fmt"
 )
 
-// Memory 记忆组件，输入完整历史，输出经过处理可供模型使用的消息
+// Memory 根据完整历史生成当前模型可见的消息视图，不负责修改或持久化 Agent 历史。
 type Memory interface {
-	// Apply 输入全部消息，返回裁剪之后的消息
+	// Apply 根据具体策略裁剪消息，返回本次模型请求使用的视图。
 	Apply(messages []llm.Message) ([]llm.Message, error)
 }
 
+// 编译期确认两种实现都满足 Memory 接口。
 var _ Memory = (*SimpleSliding)(nil)
 var _ Memory = (*TokenBudgetMemory)(nil)
 
+// TokenBudgetMemory 通过 Tokenizer 反复计算消息成本，并从最旧的普通消息开始裁剪。
 type TokenBudgetMemory struct {
 	maxTokenBudget int
 	tokenizer      tokenizer.Tokenizer
 }
 
+// SimpleSliding 保留第一条 System 消息，并按消息数量保留最新的普通消息。
 type SimpleSliding struct {
-	// MaxKeep：除system消息外，最多保留多少**条**消息，不是对话轮数
+	// MaxKeep 表示除第一条 System 消息外最多保留的消息条数，不是对话轮数。
 	MaxKeep int
 }
 
@@ -52,19 +55,17 @@ func (s *SimpleSliding) Apply(messages []llm.Message) ([]llm.Message, error) {
 		return []llm.Message{}, nil
 	}
 	var out []llm.Message
-	// 判断第一条是不是 system
+	// 只有位于历史首位的 System 消息享受永久保留。
 	first := messages[0]
 	if first.Role == llm.RoleSystem {
 		out = append(out, first)
-		// 剩余消息取 messages[1:]
+		// 普通消息按时间顺序排列，因此从尾部保留最新消息。
 		rest := messages[1:]
 		if len(rest) > s.MaxKeep {
-			// 丢弃前面老的，保留末尾 MaxKeep
 			rest = rest[len(rest)-s.MaxKeep:]
 		}
 		out = append(out, rest...)
 	} else {
-		// 没有system，直接全部消息尾部截取
 		if len(messages) > s.MaxKeep {
 			out = messages[len(messages)-s.MaxKeep:]
 		} else {
@@ -79,7 +80,7 @@ func (m *TokenBudgetMemory) Apply(messages []llm.Message) ([]llm.Message, error)
 		return []llm.Message{}, nil
 	}
 
-	// 保护头部system消息
+	// 第一条 System 消息不参与普通消息淘汰。
 	var system *llm.Message
 	var candidates []llm.Message
 	if messages[0].Role == llm.RoleSystem {
@@ -89,7 +90,7 @@ func (m *TokenBudgetMemory) Apply(messages []llm.Message) ([]llm.Message, error)
 		candidates = messages
 	}
 
-	// 从后往前尝试：不断丢弃最旧的candidates，直到总token ≤预算
+	// 不断删除最旧的候选消息，直到完整模型视图满足 Token 预算。
 	for {
 		var buf []llm.Message
 		if system != nil {
@@ -104,11 +105,11 @@ func (m *TokenBudgetMemory) Apply(messages []llm.Message) ([]llm.Message, error)
 		if total <= m.maxTokenBudget {
 			return buf, nil
 		}
-		// 超预算，丢弃最旧一条对话
+		// 候选消息全部删除后仍超限，说明受保护的 System 消息自身已超过预算。
 		if len(candidates) == 0 {
-			// 只剩system还超预算，system本身就超过上限，无法处理
 			return nil, fmt.Errorf("system message exceeds token budget")
 		}
+		// 超出预算时删除最旧的一条候选消息，再重新计算。
 		candidates = candidates[1:]
 	}
 }

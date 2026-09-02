@@ -93,6 +93,7 @@ func (a *Agent) runWithGenerator(
 			"messages are required",
 		)
 	}
+	// Agent 在独立切片中维护完整历史，避免 append 直接改变调用方传入的切片长度。
 	history := make(
 		[]llm.Message,
 		len(messages),
@@ -101,13 +102,12 @@ func (a *Agent) runWithGenerator(
 
 	usage := llm.Usage{}
 	for step := 1; step <= a.maxSteps; step++ {
-		// memory 裁剪，不修改原始全量history
+		// 每轮都基于最新完整历史生成模型视图，因为工具调用会持续向 history 追加消息。
 		croppedMessages, err := a.memory.Apply(history)
 		if err != nil {
 			return RunResult{}, fmt.Errorf("memory apply: %w", err)
 		}
 
-		// 每轮模型调用
 		request := llm.Request{
 			Messages: croppedMessages,
 			Tools:    a.registry.Definitions(),
