@@ -25,6 +25,8 @@ type Response struct {
 	Usage        Usage
 }
 
+// Stream 表示一次正在进行的模型流。
+// Recv 每次读取一个事件，Close 负责释放网络连接、响应体等底层资源。
 type Stream interface {
 	Recv() (StreamEvent, error)
 	Close() error
@@ -40,6 +42,8 @@ type StreamingModel interface {
 	) (Stream, error)
 }
 
+// StreamEventType 区分流中的增量数据和最终完成事件。
+// 使用独立类型可以避免业务代码散落未经约束的字符串。
 type StreamEventType string
 
 const (
@@ -49,6 +53,8 @@ const (
 	StreamEventDone StreamEventType = "done"
 )
 
+// StreamEvent 是统一的模型流事件。
+// Delta 用于实时展示增量文本，Response 只在 Done 事件中携带本轮完整响应。
 type StreamEvent struct {
 	// 当前事件种类
 	Type StreamEventType

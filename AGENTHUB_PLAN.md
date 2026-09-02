@@ -116,10 +116,10 @@
 
 ## 4. 当前进度
 
-- 当前阶段：**暂停新课程，复习并巩固 1.1—1.5 的现有代码**
-- 当前复习：**Message / Model、Tool、Memory 与 Agent Loop 已完成，下一步复习 Streaming**
-- 最近完成：**Agent Loop 调用链巩固与设计注释**
-- 下一验收目标：理解 Stream 事件协议、Done 与 EOF、资源关闭、错误优先级，以及 RunStream 如何复用 Agent Loop
+- 当前阶段：**1.1—1.5 代码巩固已完成，准备进入 1.6 Agent Factory**
+- 当前课程：**1.6 Agent Factory，待开始**
+- 最近完成：**Streaming 流协议、资源管理与错误优先级巩固**
+- 下一验收目标：理解 Factory 的职责边界，并配置化组装 Model、Memory、Registry 与 Agent
 
 ## 5. 验收记录
 
@@ -209,3 +209,11 @@
 - 验证：`internal/agent` 专项测试和数据竞争检查通过；全项目格式化、测试、静态检查和构建通过
 - 关键概念：接口方法的具体实现由运行时对象提供、方法值与方法调用、模型步数与工具次数、Assistant ToolCall 与 ToolMessage 顺序、最后步骤的副作用边界，以及单次流 Done 与整个 Agent 完成的区别
 - 下一步：复习 Streaming 的事件协议、资源关闭和错误优先级
+
+### 复习检查点：Streaming
+
+- 状态：✅ 已完成
+- 产出：为 Stream、StreamingModel、StreamEvent、StreamHandler 和 ConsumeStream 补充设计注释
+- 验证：`internal/llm` 专项测试和数据竞争检查通过；全项目格式化、测试、静态检查和构建通过
+- 关键概念：同步与流式响应、接口嵌入、事件消费、命名返回值与 defer、Done 与 EOF、Handler 职责、主错误和 Close 错误优先级，以及单次模型流与 Agent Loop 的边界
+- 下一步：开始 1.6 Agent Factory，通过配置统一组装 Agent 依赖
