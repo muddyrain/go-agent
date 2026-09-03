@@ -221,7 +221,7 @@
 ### 1.6 Agent Factory
 
 - 状态：✅ 已完成
-- 产出：Agent Factory 配置与依赖定义、Sliding/TokenBudget Memory 策略构造、统一 `Build` 入口、应用配置到 Factory 配置的转换，以及 YAML/环境变量配置接入
+- 产出：Agent Factory 配置与依赖定义、Sliding/TokenBudget Memory 策略构造、统一 `Build` 入口、应用配置到 Factory 配置的转换、YAML/环境变量配置接入，以及配置边界、条件依赖和组装职责的设计注释
 - 验证：配置合法与非法分支、YAML 解析、环境变量覆盖、两种 Memory 构造、依赖缺失、Factory 组装后真实运行均通过；`internal/config` 与 `internal/agentfactory` 数据竞争检查和 `make check` 通过
 - 关键概念：值配置与运行时依赖、按需依赖校验、接口返回不同具体实现、工厂组装职责、分层校验、单向依赖和边界配置转换
 - 当前边界：Factory 接受已经创建好的 Model、Registry 与 Tokenizer；真实模型适配和应用入口运行时组装尚未实现

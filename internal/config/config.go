@@ -31,11 +31,15 @@ type LogConfig struct {
 	Format string `mapstructure:"format"`
 }
 
+// AgentConfig 是从文件和环境变量读取的应用层配置。
+// 它保持普通数据形态，不依赖 agentfactory，避免基础配置层反向依赖上层组装逻辑。
 type AgentConfig struct {
 	MaxSteps int               `mapstructure:"max_steps"`
 	Memory   AgentMemoryConfig `mapstructure:"memory"`
 }
 
+// AgentMemoryConfig 保存可由部署环境覆盖的 Memory 策略参数。
+// 当前策略不会使用的字段可以保留，真正的按策略构造由 agentfactory 负责。
 type AgentMemoryConfig struct {
 	Type        string `mapstructure:"type"`
 	MaxMessages int    `mapstructure:"max_messages"`
@@ -137,6 +141,8 @@ func validate(cfg *Config) error {
 		)
 	}
 
+	// 配置层先按当前 Memory 策略校验对应参数，让 YAML 或环境变量错误在启动阶段暴露。
+	// Factory 和具体 Memory 构造函数仍会再次保护各自边界。
 	memoryType := strings.ToLower(
 		strings.TrimSpace(cfg.Agent.Memory.Type),
 	)
