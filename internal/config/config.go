@@ -13,6 +13,7 @@ type Config struct {
 	App    AppConfig    `mapstructure:"app"`
 	Server ServerConfig `mapstructure:"server"`
 	Log    LogConfig    `mapstructure:"log"`
+	Agent  AgentConfig  `mapstructure:"agent"`
 }
 
 type AppConfig struct {
@@ -28,6 +29,17 @@ type ServerConfig struct {
 type LogConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+type AgentConfig struct {
+	MaxSteps int               `mapstructure:"max_steps"`
+	Memory   AgentMemoryConfig `mapstructure:"memory"`
+}
+
+type AgentMemoryConfig struct {
+	Type        string `mapstructure:"type"`
+	MaxMessages int    `mapstructure:"max_messages"`
+	TokenBudget int    `mapstructure:"token_budget"`
 }
 
 func Load(path string) (*Config, error) {
@@ -46,6 +58,11 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("log.level", "info")
 	v.SetDefault("log.format", "text")
 
+	v.SetDefault("agent.max_steps", 4)
+	v.SetDefault("agent.memory.type", "sliding")
+	v.SetDefault("agent.memory.max_messages", 20)
+	v.SetDefault("agent.memory.token_budget", 4096)
+
 	keys := []string{
 		"app.name",
 		"app.env",
@@ -53,6 +70,10 @@ func Load(path string) (*Config, error) {
 		"server.port",
 		"log.level",
 		"log.format",
+		"agent.max_steps",
+		"agent.memory.type",
+		"agent.memory.max_messages",
+		"agent.memory.token_budget",
 	}
 
 	for _, key := range keys {
@@ -109,6 +130,39 @@ func validate(cfg *Config) error {
 	default:
 		return fmt.Errorf("log.format must be one of text, json")
 	}
+
+	if cfg.Agent.MaxSteps <= 0 {
+		return fmt.Errorf(
+			"agent.max_steps must be greater than zero",
+		)
+	}
+
+	memoryType := strings.ToLower(
+		strings.TrimSpace(cfg.Agent.Memory.Type),
+	)
+
+	switch memoryType {
+	case "sliding":
+		if cfg.Agent.Memory.MaxMessages <= 0 {
+			return fmt.Errorf(
+				"agent.memory.max_messages must be greater than zero",
+			)
+		}
+
+	case "token_budget":
+		if cfg.Agent.Memory.TokenBudget <= 0 {
+			return fmt.Errorf(
+				"agent.memory.token_budget must be greater than zero",
+			)
+		}
+
+	default:
+		return fmt.Errorf(
+			"agent.memory.type must be one of sliding, token_budget",
+		)
+	}
+
+	cfg.Agent.Memory.Type = memoryType
 
 	cfg.Log.Level = level
 	cfg.Log.Format = format

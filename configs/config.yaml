@@ -9,3 +9,10 @@ server:
 log:
   level: info
   format: text
+
+agent:
+  max_steps: 4
+  memory:
+    type: sliding
+    max_messages: 20
+    token_budget: 4096

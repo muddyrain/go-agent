@@ -47,7 +47,7 @@
 | 1.3 | Agent Loop | 模型—工具—结果闭环 | ✅ 已完成 |
 | 1.4 | Memory | Token 预算、滑动窗口、摘要压缩 | ✅ 已完成 |
 | 1.5 | Streaming | 统一同步/流式接口 | ✅ 已完成 |
-| 1.6 | Agent Factory | 配置化创建不同 Agent | ⬜ 待开始 |
+| 1.6 | Agent Factory | 配置化创建不同 Agent | ✅ 已完成 |
 | 1.7 | MCP | 多 Server 管理、超时、重连与工具适配 | ⬜ 待开始 |
 
 ### Phase 2：持久化
@@ -116,10 +116,10 @@
 
 ## 4. 当前进度
 
-- 当前阶段：**1.1—1.5 代码巩固已完成，准备进入 1.6 Agent Factory**
-- 当前课程：**1.6 Agent Factory，待开始**
-- 最近完成：**Streaming 流协议、资源管理与错误优先级巩固**
-- 下一验收目标：理解 Factory 的职责边界，并配置化组装 Model、Memory、Registry 与 Agent
+- 当前阶段：**Phase 1 Agent Runtime 已完成 1.1—1.6，准备进入 1.7 MCP**
+- 当前课程：**1.7 MCP，待开始**
+- 最近完成：**Agent Factory 的配置转换、Memory 策略选择、依赖注入与 Agent 组装**
+- 下一验收目标：理解 MCP 协议和 Client/Server 边界，实现 MCP 工具发现与现有 Tool Registry 的适配
 
 ## 5. 验收记录
 
@@ -217,3 +217,12 @@
 - 验证：`internal/llm` 专项测试和数据竞争检查通过；全项目格式化、测试、静态检查和构建通过
 - 关键概念：同步与流式响应、接口嵌入、事件消费、命名返回值与 defer、Done 与 EOF、Handler 职责、主错误和 Close 错误优先级，以及单次模型流与 Agent Loop 的边界
 - 下一步：开始 1.6 Agent Factory，通过配置统一组装 Agent 依赖
+
+### 1.6 Agent Factory
+
+- 状态：✅ 已完成
+- 产出：Agent Factory 配置与依赖定义、Sliding/TokenBudget Memory 策略构造、统一 `Build` 入口、应用配置到 Factory 配置的转换，以及 YAML/环境变量配置接入
+- 验证：配置合法与非法分支、YAML 解析、环境变量覆盖、两种 Memory 构造、依赖缺失、Factory 组装后真实运行均通过；`internal/config` 与 `internal/agentfactory` 数据竞争检查和 `make check` 通过
+- 关键概念：值配置与运行时依赖、按需依赖校验、接口返回不同具体实现、工厂组装职责、分层校验、单向依赖和边界配置转换
+- 当前边界：Factory 接受已经创建好的 Model、Registry 与 Tokenizer；真实模型适配和应用入口运行时组装尚未实现
+- 下一步：进入 1.7 MCP，先学习协议边界、传输层与工具发现，再适配现有 Tool Registry

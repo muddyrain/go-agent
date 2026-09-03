@@ -23,6 +23,14 @@ func validConfig() *Config {
 			Level:  "info",
 			Format: "text",
 		},
+		Agent: AgentConfig{
+			MaxSteps: 4,
+			Memory: AgentMemoryConfig{
+				Type:        "sliding",
+				MaxMessages: 20,
+				TokenBudget: 4096,
+			},
+		},
 	}
 }
 
@@ -42,6 +50,7 @@ func TestValidateValidConfig(t *testing.T) {
 	cfg := validConfig()
 	cfg.Log.Level = " INFO "
 	cfg.Log.Format = " JSON "
+	cfg.Agent.Memory.Type = " SLIDING "
 
 	err := validate(cfg)
 	if err != nil {
@@ -54,6 +63,14 @@ func TestValidateValidConfig(t *testing.T) {
 
 	if got, want := cfg.Log.Format, "json"; got != want {
 		t.Fatalf("Log.Format = %q, want %q", got, want)
+	}
+
+	if got, want := cfg.Agent.Memory.Type, "sliding"; got != want {
+		t.Fatalf(
+			"Agent.Memory.Type = %q, want %q",
+			got,
+			want,
+		)
 	}
 }
 
@@ -105,6 +122,36 @@ func TestValidateInvalidConfig(t *testing.T) {
 			},
 			wantMessage: "log.format must be one of text, json",
 		},
+		{
+			name: "invalid agent max steps",
+			change: func(cfg *Config) {
+				cfg.Agent.MaxSteps = 0
+			},
+			wantMessage: "agent.max_steps must be greater than zero",
+		},
+		{
+			name: "invalid sliding max messages",
+			change: func(cfg *Config) {
+				cfg.Agent.Memory.Type = "sliding"
+				cfg.Agent.Memory.MaxMessages = 0
+			},
+			wantMessage: "agent.memory.max_messages must be greater than zero",
+		},
+		{
+			name: "invalid token budget",
+			change: func(cfg *Config) {
+				cfg.Agent.Memory.Type = "token_budget"
+				cfg.Agent.Memory.TokenBudget = 0
+			},
+			wantMessage: "agent.memory.token_budget must be greater than zero",
+		},
+		{
+			name: "invalid memory type",
+			change: func(cfg *Config) {
+				cfg.Agent.Memory.Type = "unknown"
+			},
+			wantMessage: "agent.memory.type must be one of sliding, token_budget",
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,6 +186,12 @@ server:
 log:
   level: warn
   format: json
+agent:
+  max_steps: 6
+  memory:
+    type: token_budget
+    max_messages: 30
+    token_budget: 2048
 `)
 
 	cfg, err := Load(path)
@@ -169,6 +222,38 @@ log:
 	if got, want := cfg.Log.Format, "json"; got != want {
 		t.Fatalf("Log.Format = %q, want %q", got, want)
 	}
+	if got, want := cfg.Agent.MaxSteps, 6; got != want {
+		t.Fatalf(
+			"Agent.MaxSteps = %d, want %d",
+			got,
+			want,
+		)
+	}
+
+	if got, want := cfg.Agent.Memory.Type,
+		"token_budget"; got != want {
+		t.Fatalf(
+			"Agent.Memory.Type = %q, want %q",
+			got,
+			want,
+		)
+	}
+
+	if got, want := cfg.Agent.Memory.MaxMessages, 30; got != want {
+		t.Fatalf(
+			"Agent.Memory.MaxMessages = %d, want %d",
+			got,
+			want,
+		)
+	}
+
+	if got, want := cfg.Agent.Memory.TokenBudget, 2048; got != want {
+		t.Fatalf(
+			"Agent.Memory.TokenBudget = %d, want %d",
+			got,
+			want,
+		)
+	}
 }
 
 func TestLoadEnvironmentOverride(t *testing.T) {
@@ -187,6 +272,15 @@ log:
 	t.Setenv("AGENTHUB_APP_ENV", "production")
 	t.Setenv("AGENTHUB_SERVER_PORT", "9000")
 	t.Setenv("AGENTHUB_LOG_FORMAT", "json")
+	t.Setenv("AGENTHUB_AGENT_MAX_STEPS", "8")
+	t.Setenv(
+		"AGENTHUB_AGENT_MEMORY_TYPE",
+		"token_budget",
+	)
+	t.Setenv(
+		"AGENTHUB_AGENT_MEMORY_TOKEN_BUDGET",
+		"2048",
+	)
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -203,6 +297,31 @@ log:
 
 	if got, want := cfg.Log.Format, "json"; got != want {
 		t.Fatalf("Log.Format = %q, want %q", got, want)
+	}
+
+	if got, want := cfg.Agent.MaxSteps, 8; got != want {
+		t.Fatalf(
+			"Agent.MaxSteps = %d, want %d",
+			got,
+			want,
+		)
+	}
+
+	if got, want := cfg.Agent.Memory.Type,
+		"token_budget"; got != want {
+		t.Fatalf(
+			"Agent.Memory.Type = %q, want %q",
+			got,
+			want,
+		)
+	}
+
+	if got, want := cfg.Agent.Memory.TokenBudget, 2048; got != want {
+		t.Fatalf(
+			"Agent.Memory.TokenBudget = %d, want %d",
+			got,
+			want,
+		)
 	}
 }
 
