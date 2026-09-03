@@ -116,10 +116,10 @@
 
 ## 4. 当前进度
 
-- 当前阶段：**Phase 1 Agent Runtime 已完成 1.1—1.6，准备进入 1.7 MCP**
-- 当前课程：**1.7 MCP，待开始**
-- 最近完成：**Agent Factory 的配置转换、Memory 策略选择、依赖注入与 Agent 组装**
-- 下一验收目标：理解 MCP 协议和 Client/Server 边界，实现 MCP 工具发现与现有 Tool Registry 的适配
+- 当前阶段：**Phase 1 Agent Runtime 正在进行 1.7 MCP**
+- 当前课程：**1.7.2 MCP Tool Adapter，待开始**
+- 最近完成：**1.7.1 MCP Host、Session、Server 边界及远程工具协议模型**
+- 下一验收目标：把 MCP ToolDefinition 与 CallResult 适配为现有 `tool.Tool`，复用 Registry、Executor 与 Agent Loop
 
 ## 5. 验收记录
 
@@ -226,3 +226,12 @@
 - 关键概念：值配置与运行时依赖、按需依赖校验、接口返回不同具体实现、工厂组装职责、分层校验、单向依赖和边界配置转换
 - 当前边界：Factory 接受已经创建好的 Model、Registry 与 Tokenizer；真实模型适配和应用入口运行时组装尚未实现
 - 下一步：进入 1.7 MCP，先学习协议边界、传输层与工具发现，再适配现有 Tool Registry
+
+### 1.7.1 MCP Session 边界
+
+- 状态：✅ 已完成
+- 产出：MCP 远程工具定义、内容块与调用结果模型，以及支持工具发现、远程调用和资源关闭的 `Session` 接口
+- 验证：工具发现、工具调用、Context 取消与会话关闭测试通过；`internal/mcpclient` 数据竞争检查和 `make check` 通过
+- 关键概念：Host/Client/Session/Server 职责、MCP 协议模型与内部 Tool 模型隔离、一次调用的多内容块、工具业务错误与流程错误分层，以及由 SDK Adapter 隐藏生命周期和传输差异
+- 当前边界：只定义稳定的客户端会话抽象和测试替身，尚未实现 MCP Tool Adapter、真实 SDK、传输或网络连接
+- 下一步：实现 MCP Tool Adapter，将远程工具注册到现有 Registry 并通过 Executor 调用
