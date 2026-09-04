@@ -215,10 +215,153 @@ func TestRegistryValidate(t *testing.T) {
 }
 
 func TestRegistryRejectsInvalidSchema(t *testing.T) {
-	function, err := NewFunction(
+	registry := NewRegistry()
+
+	valid := newTestFunction(t, "valid")
+	invalid, err := NewFunction(
 		Definition{
 			Name:        "invalid",
-			Description: "invalid schema tool",
+			Description: "invalid schema",
+			Parameters: json.RawMessage(
+				`{"type":"not-a-real-json-type"}`,
+			),
+		},
+		func(
+			_ context.Context,
+			_ json.RawMessage,
+		) (string, error) {
+			return "", nil
+		},
+	)
+	if err != nil {
+		t.Fatalf(
+			"NewFunction() returned error: %v",
+			err,
+		)
+	}
+	err = registry.RegisterBatch(
+		valid,
+		invalid,
+	)
+	if err == nil {
+		t.Fatal(
+			"RegisterBatch() returned nil error",
+		)
+	}
+
+	if _, ok := registry.Get("valid"); ok {
+		t.Fatal(
+			"failed batch partially registered valid tool",
+		)
+	}
+
+	if _, ok := registry.Get("invalid"); ok {
+		t.Fatal(
+			"failed batch registered invalid tool",
+		)
+	}
+}
+
+func TestRegistryRegisterBatch(t *testing.T) {
+	registry := NewRegistry()
+
+	echo := newTestFunction(t, "echo")
+	weather := newTestFunction(t, "weather")
+
+	err := registry.RegisterBatch(
+		echo,
+		weather,
+	)
+	if err != nil {
+		t.Fatalf(
+			"RegisterBatch() returned error: %v",
+			err,
+		)
+	}
+
+	for _, name := range []string{
+		"echo",
+		"weather",
+	} {
+		if _, ok := registry.Get(name); !ok {
+			t.Fatalf(
+				"Get(%q) did not find registered tool",
+				name,
+			)
+		}
+	}
+}
+
+func TestRegistryRegisterBatchRejectsDuplicateName(
+	t *testing.T,
+) {
+	registry := NewRegistry()
+
+	err := registry.RegisterBatch(
+		newTestFunction(t, "echo"),
+		newTestFunction(t, "echo"),
+	)
+	if err == nil {
+		t.Fatal(
+			"RegisterBatch() returned nil error",
+		)
+	}
+
+	if _, ok := registry.Get("echo"); ok {
+		t.Fatal(
+			"duplicate batch partially modified registry",
+		)
+	}
+}
+
+func TestRegistryRegisterBatchAtomicOnExistingName(
+	t *testing.T,
+) {
+	registry := NewRegistry()
+
+	if err := registry.Register(
+		newTestFunction(t, "existing"),
+	); err != nil {
+		t.Fatalf(
+			"Register() returned error: %v",
+			err,
+		)
+	}
+
+	err := registry.RegisterBatch(
+		newTestFunction(t, "new-tool"),
+		newTestFunction(t, "existing"),
+	)
+	if err == nil {
+		t.Fatal(
+			"RegisterBatch() returned nil error",
+		)
+	}
+
+	if _, ok := registry.Get("new-tool"); ok {
+		t.Fatal(
+			"failed batch partially registered new-tool",
+		)
+	}
+
+	if _, ok := registry.Get("existing"); !ok {
+		t.Fatal(
+			"existing tool was unexpectedly removed",
+		)
+	}
+}
+
+func TestRegistryRegisterBatchAtomicOnInvalidSchema(
+	t *testing.T,
+) {
+	registry := NewRegistry()
+
+	valid := newTestFunction(t, "valid")
+
+	invalid, err := NewFunction(
+		Definition{
+			Name:        "invalid",
+			Description: "invalid schema",
 			Parameters: json.RawMessage(
 				`{"type":"not-a-real-json-type"}`,
 			),
@@ -237,18 +380,25 @@ func TestRegistryRejectsInvalidSchema(t *testing.T) {
 		)
 	}
 
-	registry := NewRegistry()
-
-	err = registry.Register(function)
+	err = registry.RegisterBatch(
+		valid,
+		invalid,
+	)
 	if err == nil {
 		t.Fatal(
-			"Register() returned nil error, want error",
+			"RegisterBatch() returned nil error",
+		)
+	}
+
+	if _, ok := registry.Get("valid"); ok {
+		t.Fatal(
+			"failed batch partially registered valid tool",
 		)
 	}
 
 	if _, ok := registry.Get("invalid"); ok {
 		t.Fatal(
-			"invalid schema tool was registered",
+			"failed batch registered invalid tool",
 		)
 	}
 }

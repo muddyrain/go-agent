@@ -48,7 +48,7 @@
 | 1.4 | Memory | Token 预算、滑动窗口、摘要压缩 | ✅ 已完成 |
 | 1.5 | Streaming | 统一同步/流式接口 | ✅ 已完成 |
 | 1.6 | Agent Factory | 配置化创建不同 Agent | ✅ 已完成 |
-| 1.7 | MCP | 多 Server 管理、超时、重连与工具适配 | ⬜ 待开始 |
+| 1.7 | MCP | 多 Server 管理、超时、重连与工具适配 | 🔄 进行中 |
 
 ### Phase 2：持久化
 
@@ -117,9 +117,9 @@
 ## 4. 当前进度
 
 - 当前阶段：**Phase 1 Agent Runtime 正在进行 1.7 MCP**
-- 当前课程：**1.7.3 多 Server 管理与工具名称冲突，待开始**
-- 最近完成：**1.7.2 MCP Tool Adapter，将远程工具接入 Registry 与 Executor**
-- 下一验收目标：管理多个 MCP Session，为远程工具生成稳定且不冲突的本地名称，并完成批量发现与注册
+- 当前课程：**1.7.4 MCP 超时、关闭、断线与重连，待开始**
+- 最近完成：**1.7.3 多 MCP Server 管理、工具命名空间与原子批量注册**
+- 下一验收目标：建立 MCP Session 生命周期和错误分类边界，实现超时、关闭与可测试的重连策略
 
 ## 5. 验收记录
 
@@ -244,3 +244,13 @@
 - 关键概念：适配器模式、远程名称与模型可见名称分离、JSON 语法校验与 Schema 编译职责分层、`json.RawMessage` 防御性复制、`%w` 保留错误链、编译期接口断言，以及 MCP 业务错误到 Tool Result 的转换
 - 当前边界：仅支持文本内容块；普通网络和协议错误仍按普通工具错误进入模型，精细错误分类、超时和重连留待后续实现
 - 下一步：实现多 MCP Server 的 Session 管理、工具批量发现、命名空间和名称冲突处理
+
+### 1.7.3 多 MCP Server 管理与名称冲突
+
+- 状态：✅ 已完成
+- 产出：Registry 原子批量注册、ToolAdapter 本地模型名与远程工具名分离、Manager 多 Session 管理、工具批量发现、`server__tool` 命名空间和同名 Server 拒绝策略
+- 验证：批次成功、批次内重名、已有名称冲突、后置非法 Schema 不产生部分写入、两个 Server 的同名远程工具注册与执行、构造参数校验、重复 Server、注册失败后重试和 ListTools 错误链测试通过；`internal/mcpclient` 与 `internal/tool` 数据竞争检查及 `make check` 通过
+- 关键概念：本地名称与远程名称分离、注册阶段与运行阶段分离、批量操作全成功或全失败、锁外准备与锁内提交、检查与写入的同一临界区、接口切片与具体类型切片不兼容，以及 Manager、Adapter、Registry 的职责边界
+- 当前边界：Manager 在添加 Server 时串行持锁执行工具发现与注册；尚未负责关闭全部 Session、连接状态、超时分类、断线检测或重连
+- 学习图示：`internal/mcpclient/mcp-multi-server-manager-flow.svg`
+- 下一步：进入 1.7.4，设计 MCP Session 的超时、关闭、断线与可测试重连策略

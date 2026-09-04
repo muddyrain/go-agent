@@ -15,6 +15,7 @@ func TestToolAdapterDefinition(t *testing.T) {
 
 	adapter, err := NewToolAdapter(
 		session,
+		" filesystem__echo ",
 		ToolDefinition{
 			Name:        " echo ",
 			Description: " returns a message ",
@@ -32,7 +33,8 @@ func TestToolAdapterDefinition(t *testing.T) {
 
 	definition := adapter.Definition()
 
-	if got, want := definition.Name, "echo"; got != want {
+	if got, want := definition.Name,
+		"filesystem__echo"; got != want {
 		t.Fatalf(
 			"Definition().Name = %q, want %q",
 			got,
@@ -74,6 +76,7 @@ func TestToolAdapterExecute(t *testing.T) {
 
 	adapter, err := NewToolAdapter(
 		session,
+		"filesystem__echo",
 		ToolDefinition{
 			Name:        "echo",
 			Description: "returns a message",
@@ -147,6 +150,7 @@ func TestToolAdapterThroughExecutor(t *testing.T) {
 
 	adapter, err := NewToolAdapter(
 		session,
+		"filesystem__echo",
 		ToolDefinition{
 			Name:        "echo",
 			Description: "returns a message",
@@ -189,7 +193,7 @@ func TestToolAdapterThroughExecutor(t *testing.T) {
 		context.Background(),
 		tool.Call{
 			ID:   "call-1",
-			Name: "echo",
+			Name: "filesystem__echo",
 			Arguments: json.RawMessage(
 				`{"message":"hello"}`,
 			),
@@ -217,6 +221,15 @@ func TestToolAdapterThroughExecutor(t *testing.T) {
 			result.Content,
 		)
 	}
+
+	if got, want := session.calledName,
+		"echo"; got != want {
+		t.Fatalf(
+			"called remote name = %q, want %q",
+			got,
+			want,
+		)
+	}
 }
 
 func TestToolAdapterCancellation(t *testing.T) {
@@ -227,6 +240,7 @@ func TestToolAdapterCancellation(t *testing.T) {
 
 	adapter, err := NewToolAdapter(
 		&stubSession{},
+		"echo",
 		ToolDefinition{
 			Name:        "echo",
 			Description: "returns a message",
@@ -260,12 +274,14 @@ func TestNewToolAdapterValidation(t *testing.T) {
 	tests := []struct {
 		name       string
 		session    Session
+		localName  string
 		definition ToolDefinition
 		wantError  string
 	}{
 		{
-			name:    "nil session",
-			session: nil,
+			name:      "nil session",
+			session:   nil,
+			localName: "filesystem__echo",
 			definition: ToolDefinition{
 				Name:        "echo",
 				Description: "returns a message",
@@ -276,8 +292,22 @@ func TestNewToolAdapterValidation(t *testing.T) {
 			wantError: "session is required",
 		},
 		{
-			name:    "empty tool name",
-			session: validSession,
+			name:      "empty local name",
+			session:   validSession,
+			localName: " ",
+			definition: ToolDefinition{
+				Name:        "echo",
+				Description: "returns a message",
+				InputSchema: json.RawMessage(
+					`{"type":"object"}`,
+				),
+			},
+			wantError: "local tool name is required",
+		},
+		{
+			name:      "empty remote tool name",
+			session:   validSession,
+			localName: "filesystem__echo",
 			definition: ToolDefinition{
 				Name:        " ",
 				Description: "returns a message",
@@ -285,11 +315,12 @@ func TestNewToolAdapterValidation(t *testing.T) {
 					`{"type":"object"}`,
 				),
 			},
-			wantError: "name is required",
+			wantError: "MCP tool name is required",
 		},
 		{
-			name:    "empty input schema",
-			session: validSession,
+			name:      "empty input schema",
+			session:   validSession,
+			localName: "filesystem__echo",
 			definition: ToolDefinition{
 				Name:        "echo",
 				Description: "returns a message",
@@ -298,8 +329,9 @@ func TestNewToolAdapterValidation(t *testing.T) {
 			wantError: "input schema is required",
 		},
 		{
-			name:    "invalid input schema JSON",
-			session: validSession,
+			name:      "invalid input schema JSON",
+			session:   validSession,
+			localName: "filesystem__echo",
 			definition: ToolDefinition{
 				Name:        "echo",
 				Description: "returns a message",
@@ -315,6 +347,7 @@ func TestNewToolAdapterValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			adapter, err := NewToolAdapter(
 				tt.session,
+				tt.localName,
 				tt.definition,
 			)
 

@@ -22,48 +22,21 @@ type registeredTool struct {
 	schema *jsonschema.Schema
 }
 
+// preparedTool 保存已经完成名称校验和 Schema 编译、
+// 但尚未写入 Registry 的工具。
+type preparedTool struct {
+	name       string
+	registered registeredTool
+}
+
 func NewRegistry() *Registry {
 	return &Registry{
 		tools: make(map[string]registeredTool),
 	}
 }
 
-func (r *Registry) Register(tool Tool) error {
-	if tool == nil {
-		return fmt.Errorf("tool is required")
-	}
-
-	definition := tool.Definition()
-	name := strings.TrimSpace(definition.Name)
-
-	if name == "" {
-		return fmt.Errorf("tool name is required")
-	}
-
-	schema, err := compileSchema(
-		name,
-		definition.Parameters,
-	)
-	if err != nil {
-		return err
-	}
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if _, exists := r.tools[name]; exists {
-		return fmt.Errorf(
-			"tool %q is already registered",
-			name,
-		)
-	}
-
-	r.tools[name] = registeredTool{
-		tool:   tool,
-		schema: schema,
-	}
-
-	return nil
+func (r *Registry) Register(candidate Tool) error {
+	return r.RegisterBatch(candidate)
 }
 
 func (r *Registry) Get(name string) (Tool, bool) {
@@ -202,5 +175,89 @@ func (r *Registry) Validate(
 		)
 	}
 
+	return nil
+}
+
+func (r *Registry) RegisterBatch(candidates ...Tool) error {
+	if len(candidates) == 0 {
+		return fmt.Errorf(
+			"at least one tool is required",
+		)
+	}
+
+	prepared := make(
+		[]preparedTool,
+		0,
+		len(candidates),
+	)
+
+	batchNames := make(
+		map[string]struct{},
+		len(candidates),
+	)
+
+	// 第一阶段：校验并准备所有工具。
+	for _, candidate := range candidates {
+		if candidate == nil {
+			return fmt.Errorf(
+				"tool is required",
+			)
+		}
+
+		definition := candidate.Definition()
+		name := strings.TrimSpace(
+			definition.Name,
+		)
+
+		if name == "" {
+			return fmt.Errorf(
+				"tool name is required",
+			)
+		}
+
+		if _, exists := batchNames[name]; exists {
+			return fmt.Errorf(
+				"tool %q is duplicated in batch",
+				name,
+			)
+		}
+
+		schema, err := compileSchema(
+			name,
+			definition.Parameters,
+		)
+		if err != nil {
+			return err
+		}
+
+		batchNames[name] = struct{}{}
+
+		prepared = append(
+			prepared,
+			preparedTool{
+				name: name,
+				registered: registeredTool{
+					tool:   candidate,
+					schema: schema,
+				},
+			},
+		)
+	}
+	// 第二阶段：获取写锁，检查 Registry 中是否已存在同名工具。
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, item := range prepared {
+		if _, exists := r.tools[item.name]; exists {
+			return fmt.Errorf(
+				"tool %q is already registered",
+				item.name,
+			)
+		}
+	}
+	// 第三阶段：所有检查通过后，一次性写入。
+	for _, item := range prepared {
+		r.tools[item.name] = item.registered
+	}
 	return nil
 }

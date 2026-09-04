@@ -18,6 +18,7 @@ type ToolAdapter struct {
 
 func NewToolAdapter(
 	session Session,
+	localName string,
 	remote ToolDefinition,
 ) (*ToolAdapter, error) {
 	if session == nil {
@@ -26,8 +27,15 @@ func NewToolAdapter(
 		)
 	}
 
-	name := strings.TrimSpace(remote.Name)
-	if name == "" {
+	localName = strings.TrimSpace(localName)
+	if localName == "" {
+		return nil, fmt.Errorf(
+			"local tool name is required",
+		)
+	}
+
+	remoteName := strings.TrimSpace(remote.Name)
+	if remoteName == "" {
 		return nil, fmt.Errorf(
 			"MCP tool name is required",
 		)
@@ -36,14 +44,14 @@ func NewToolAdapter(
 	if len(remote.InputSchema) == 0 {
 		return nil, fmt.Errorf(
 			"MCP tool %q input schema is required",
-			name,
+			remoteName,
 		)
 	}
 
 	if !json.Valid(remote.InputSchema) {
 		return nil, fmt.Errorf(
 			"MCP tool %q input schema must be valid JSON",
-			name,
+			remoteName,
 		)
 	}
 
@@ -51,9 +59,9 @@ func NewToolAdapter(
 
 	return &ToolAdapter{
 		session:    session,
-		remoteName: name,
+		remoteName: remoteName,
 		definition: tool.Definition{
-			Name: name,
+			Name: localName,
 			Description: strings.TrimSpace(
 				remote.Description,
 			),

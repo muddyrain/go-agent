@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub 多 MCP Server 管理与工具调用流程</title>
+  <desc id="desc">上半部分展示 Manager 发现两个 MCP Server 的同名 search 工具、生成命名空间并原子注册；下半部分展示模型调用本地名称后，ToolAdapter 将调用恢复为远程 search 名称。</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#4F7CCF"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#32876A"/>
+    </marker>
+    <style>
+      .title { font: 700 34px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17212B; }
+      .subtitle { font: 400 17px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #5C6977; }
+      .lane-title { font: 700 22px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17212B; }
+      .node-title { font: 700 18px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17212B; }
+      .body { font: 400 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #465566; }
+      .code { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #24364B; }
+      .label { font: 600 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #4F7CCF; }
+      .note { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #5C6977; }
+      .node { stroke-width: 2; }
+      .arrow { fill: none; stroke-width: 3; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#F7F8FA"/>
+  <text x="72" y="64" class="title">多 MCP Server：命名空间、原子注册与运行调用</text>
+  <text x="72" y="96" class="subtitle">Manager 只负责接入；运行时由 Agent Loop、Executor、Registry 与 ToolAdapter 完成调用。</text>
+
+  <!-- Registration lane -->
+  <rect x="56" y="130" width="1328" height="342" rx="22" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+  <rect x="56" y="130" width="16" height="342" rx="8" fill="#6AAE91"/>
+  <text x="94" y="174" class="lane-title">① 接入注册阶段</text>
+  <text x="94" y="202" class="subtitle">Manager.AddServer 在 Server 接入时执行，不参与之后的每次 ToolCall。</text>
+
+  <rect x="96" y="244" width="220" height="142" rx="16" fill="#EDF8F3" stroke="#75B99B" class="node"/>
+  <text x="118" y="276" class="node-title">MCP Sessions</text>
+  <text x="118" y="309" class="code">filesystem</text>
+  <text x="118" y="335" class="body">远程工具：search</text>
+  <text x="118" y="365" class="code">database</text>
+  <text x="118" y="391" class="body">远程工具：search</text>
+
+  <path d="M316 315 H396" stroke="#32876A" class="arrow" marker-end="url(#arrow-green)"/>
+  <text x="334" y="299" class="label">ListTools</text>
+
+  <rect x="408" y="244" width="238" height="142" rx="16" fill="#FFF8E9" stroke="#DAB278" class="node"/>
+  <text x="430" y="276" class="node-title">Manager</text>
+  <text x="430" y="309" class="body">清理并校验 Server 名称</text>
+  <text x="430" y="337" class="body">生成本地命名空间</text>
+  <text x="430" y="367" class="code">server__tool</text>
+
+  <path d="M646 315 H726" stroke="#32876A" class="arrow" marker-end="url(#arrow-green)"/>
+  <text x="662" y="299" class="label">适配全部工具</text>
+
+  <rect x="738" y="228" width="270" height="174" rx="16" fill="#EEF4FF" stroke="#84A7E6" class="node"/>
+  <text x="760" y="260" class="node-title">ToolAdapters</text>
+  <text x="760" y="295" class="code">filesystem__search</text>
+  <text x="760" y="320" class="body">remoteName = search</text>
+  <line x1="760" y1="338" x2="986" y2="338" stroke="#CAD5E3"/>
+  <text x="760" y="366" class="code">database__search</text>
+  <text x="760" y="391" class="body">remoteName = search</text>
+
+  <path d="M1008 315 H1088" stroke="#32876A" class="arrow" marker-end="url(#arrow-green)"/>
+  <text x="1018" y="299" class="label">RegisterBatch</text>
+
+  <rect x="1100" y="244" width="238" height="142" rx="16" fill="#F1F4F8" stroke="#96A5B5" class="node"/>
+  <text x="1122" y="276" class="node-title">Tool Registry</text>
+  <text x="1122" y="310" class="body">全部校验、全部编译</text>
+  <text x="1122" y="338" class="body">锁内检查冲突并写入</text>
+  <text x="1122" y="368" class="code">全成功 / 全失败</text>
+
+  <rect x="398" y="420" width="652" height="34" rx="10" fill="#FFF1EF" stroke="#EFA39A"/>
+  <text x="724" y="442" text-anchor="middle" class="note">注册失败：Registry 不部分写入，Manager 不记录 Session，因此允许修复后重试</text>
+
+  <!-- Runtime lane -->
+  <rect x="56" y="504" width="1328" height="320" rx="22" fill="#FFFFFF" stroke="#DDE3EA" stroke-width="2"/>
+  <rect x="56" y="504" width="16" height="320" rx="8" fill="#6F98DF"/>
+  <text x="94" y="548" class="lane-title">② 运行调用阶段</text>
+  <text x="94" y="576" class="subtitle">模型只看本地唯一名称；Adapter 在协议边界恢复 MCP Server 认识的远程名称。</text>
+
+  <rect x="94" y="626" width="178" height="104" rx="15" fill="#EEF4FF" stroke="#84A7E6" class="node"/>
+  <text x="116" y="658" class="node-title">LLM</text>
+  <text x="116" y="693" class="code">filesystem__search</text>
+
+  <path d="M272 678 H334" stroke="#4F7CCF" class="arrow" marker-end="url(#arrow-blue)"/>
+
+  <rect x="346" y="626" width="174" height="104" rx="15" fill="#F1F4F8" stroke="#96A5B5" class="node"/>
+  <text x="368" y="658" class="node-title">Agent Loop</text>
+  <text x="368" y="691" class="body">读取 ToolCalls</text>
+
+  <path d="M520 678 H582" stroke="#4F7CCF" class="arrow" marker-end="url(#arrow-blue)"/>
+
+  <rect x="594" y="626" width="174" height="104" rx="15" fill="#F1F4F8" stroke="#96A5B5" class="node"/>
+  <text x="616" y="658" class="node-title">Executor</text>
+  <text x="616" y="691" class="body">校验并发起执行</text>
+
+  <path d="M768 678 H830" stroke="#4F7CCF" class="arrow" marker-end="url(#arrow-blue)"/>
+
+  <rect x="842" y="626" width="174" height="104" rx="15" fill="#F1F4F8" stroke="#96A5B5" class="node"/>
+  <text x="864" y="658" class="node-title">Registry</text>
+  <text x="864" y="691" class="body">按本地名称查找</text>
+
+  <path d="M1016 678 H1078" stroke="#4F7CCF" class="arrow" marker-end="url(#arrow-blue)"/>
+
+  <rect x="1090" y="610" width="246" height="136" rx="15" fill="#FFF8E9" stroke="#DAB278" class="node"/>
+  <text x="1112" y="642" class="node-title">ToolAdapter</text>
+  <text x="1112" y="675" class="body">本地：filesystem__search</text>
+  <text x="1112" y="702" class="body">远程：search</text>
+  <text x="1112" y="730" class="code">CallTool("search")</text>
+
+  <path d="M1213 746 V782 H270" stroke="#4F7CCF" class="arrow" marker-end="url(#arrow-blue)"/>
+  <rect x="94" y="760" width="176" height="46" rx="14" fill="#EDF8F3" stroke="#75B99B" class="node"/>
+  <text x="182" y="789" text-anchor="middle" class="node-title">MCP Server</text>
+  <text x="708" y="801" text-anchor="middle" class="note">Session.CallTool 将远程名称 search 和参数发送到原 Session</text>
+
+  <rect x="56" y="846" width="1328" height="34" rx="10" fill="#EAF3FF"/>
+  <text x="720" y="868" text-anchor="middle" class="note">核心边界：Manager 管“接进来”，Executor + Adapter 管“调用出去”；Registry 统一保存和校验工具。</text>
+</svg>
