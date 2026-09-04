@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub 学习路线校准图</title>
+  <desc id="desc">对比原先组件横向堆叠路线与新的可运行纵向切片路线，并标出当前下一课。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#315b73"/>
+    </marker>
+    <marker id="arrow-muted" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#9aa3a8"/>
+    </marker>
+    <style>
+      .title{font:700 34px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#15242c}
+      .subtitle{font:400 17px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#5d6b72}
+      .section{font:700 23px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#1d3039}
+      .node-title{font:700 17px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#1b3039}
+      .node-copy{font:400 14px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#516169}
+      .small{font:500 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#617078}
+      .badge{font:700 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#fff}
+      .phase{font:700 15px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#214455}
+    </style>
+  </defs>
+
+  <rect width="1440" height="900" fill="#f6f4ef"/>
+  <rect x="40" y="34" width="1360" height="832" rx="22" fill="#ffffff" stroke="#d9ddd9"/>
+
+  <text x="76" y="92" class="title">AgentHub 学习路线校准</text>
+  <text x="76" y="124" class="subtitle">不是推倒重来：保留已有 Runtime 零件，把课程主线改为“先看见，再理解，再抽象，再测试”</text>
+
+  <text x="76" y="180" class="section">为什么现在看不懂</text>
+  <rect x="76" y="202" width="1288" height="184" rx="18" fill="#fbf7f4" stroke="#e6d8cf"/>
+
+  <g>
+    <rect x="104" y="238" width="190" height="100" rx="14" fill="#f3e5df" stroke="#d9b9aa"/>
+    <text x="199" y="273" text-anchor="middle" class="node-title">先造抽象</text>
+    <text x="199" y="299" text-anchor="middle" class="node-copy">接口 / Factory / Adapter</text>
+    <text x="199" y="320" text-anchor="middle" class="node-copy">缺少真实问题来源</text>
+
+    <line x1="302" y1="288" x2="340" y2="288" stroke="#9aa3a8" stroke-width="3"/>
+    <polygon points="340,281 354,288 340,295" fill="#9aa3a8"/>
+
+    <rect x="360" y="238" width="190" height="100" rx="14" fill="#f3e5df" stroke="#d9b9aa"/>
+    <text x="455" y="273" text-anchor="middle" class="node-title">再堆单测</text>
+    <text x="455" y="299" text-anchor="middle" class="node-copy">86 个顶层测试函数</text>
+    <text x="455" y="320" text-anchor="middle" class="node-copy">边界多，主线不明显</text>
+
+    <line x1="558" y1="288" x2="596" y2="288" stroke="#9aa3a8" stroke-width="3"/>
+    <polygon points="596,281 610,288 596,295" fill="#9aa3a8"/>
+
+    <rect x="616" y="238" width="190" height="100" rx="14" fill="#f3e5df" stroke="#d9b9aa"/>
+    <text x="711" y="273" text-anchor="middle" class="node-title">继续扩组件</text>
+    <text x="711" y="299" text-anchor="middle" class="node-copy">Memory / Streaming / MCP</text>
+    <text x="711" y="320" text-anchor="middle" class="node-copy">都停留在 internal</text>
+
+    <line x1="814" y1="288" x2="852" y2="288" stroke="#9aa3a8" stroke-width="3"/>
+    <polygon points="852,281 866,288 852,295" fill="#9aa3a8"/>
+
+    <rect x="872" y="238" width="210" height="100" rx="14" fill="#f3e5df" stroke="#d9b9aa"/>
+    <text x="977" y="273" text-anchor="middle" class="node-title">入口没有串联</text>
+    <text x="977" y="299" text-anchor="middle" class="node-copy">main 只加载配置与日志</text>
+    <text x="977" y="320" text-anchor="middle" class="node-copy">没有运行 Agent</text>
+
+    <line x1="1090" y1="288" x2="1128" y2="288" stroke="#9aa3a8" stroke-width="3"/>
+    <polygon points="1128,281 1142,288 1128,295" fill="#9aa3a8"/>
+
+    <rect x="1148" y="226" width="184" height="124" rx="14" fill="#fff0ed" stroke="#df9385" stroke-width="2"/>
+    <text x="1240" y="267" text-anchor="middle" class="node-title">学习结果</text>
+    <text x="1240" y="294" text-anchor="middle" class="node-copy">“做了很多”</text>
+    <text x="1240" y="316" text-anchor="middle" class="node-copy">但“看不到在做什么”</text>
+  </g>
+
+  <text x="76" y="442" class="section">校准后的主线</text>
+  <rect x="76" y="464" width="1288" height="252" rx="18" fill="#f2f7f8" stroke="#c6d9df"/>
+
+  <g>
+    <rect x="104" y="512" width="184" height="112" rx="14" fill="#e7f2f4" stroke="#9bc3cf"/>
+    <circle cx="128" cy="536" r="15" fill="#315b73"/>
+    <text x="128" y="541" text-anchor="middle" class="badge">1</text>
+    <text x="196" y="548" text-anchor="middle" class="node-title">先运行现象</text>
+    <text x="196" y="576" text-anchor="middle" class="node-copy">终端先看得到结果</text>
+    <text x="196" y="598" text-anchor="middle" class="node-copy">记录成功与失败</text>
+
+    <line x1="296" y1="568" x2="330" y2="568" stroke="#315b73" stroke-width="3"/>
+    <polygon points="330,560 346,568 330,576" fill="#315b73"/>
+
+    <rect x="350" y="512" width="184" height="112" rx="14" fill="#e7f2f4" stroke="#9bc3cf"/>
+    <circle cx="374" cy="536" r="15" fill="#315b73"/>
+    <text x="374" y="541" text-anchor="middle" class="badge">2</text>
+    <text x="442" y="548" text-anchor="middle" class="node-title">跟一次调用链</text>
+    <text x="442" y="576" text-anchor="middle" class="node-copy">只读真实经过的文件</text>
+    <text x="442" y="598" text-anchor="middle" class="node-copy">明确输入、输出、错误</text>
+
+    <line x1="542" y1="568" x2="576" y2="568" stroke="#315b73" stroke-width="3"/>
+    <polygon points="576,560 592,568 576,576" fill="#315b73"/>
+
+    <rect x="596" y="512" width="184" height="112" rx="14" fill="#e7f2f4" stroke="#9bc3cf"/>
+    <circle cx="620" cy="536" r="15" fill="#315b73"/>
+    <text x="620" y="541" text-anchor="middle" class="badge">3</text>
+    <text x="688" y="548" text-anchor="middle" class="node-title">学习者改行为</text>
+    <text x="688" y="576" text-anchor="middle" class="node-copy">每节只解决一个问题</text>
+    <text x="688" y="598" text-anchor="middle" class="node-copy">立即重新运行观察</text>
+
+    <line x1="788" y1="568" x2="822" y2="568" stroke="#315b73" stroke-width="3"/>
+    <polygon points="822,560 838,568 822,576" fill="#315b73"/>
+
+    <rect x="842" y="512" width="184" height="112" rx="14" fill="#e7f2f4" stroke="#9bc3cf"/>
+    <circle cx="866" cy="536" r="15" fill="#315b73"/>
+    <text x="866" y="541" text-anchor="middle" class="badge">4</text>
+    <text x="934" y="548" text-anchor="middle" class="node-title">问题驱动抽象</text>
+    <text x="934" y="576" text-anchor="middle" class="node-copy">先指出重复或耦合</text>
+    <text x="934" y="598" text-anchor="middle" class="node-copy">再决定是否封装</text>
+
+    <line x1="1034" y1="568" x2="1068" y2="568" stroke="#315b73" stroke-width="3"/>
+    <polygon points="1068,560 1084,568 1068,576" fill="#315b73"/>
+
+    <rect x="1088" y="512" width="244" height="112" rx="14" fill="#e7f2f4" stroke="#9bc3cf"/>
+    <circle cx="1112" cy="536" r="15" fill="#315b73"/>
+    <text x="1112" y="541" text-anchor="middle" class="badge">5</text>
+    <text x="1210" y="548" text-anchor="middle" class="node-title">最后写最小测试</text>
+    <text x="1210" y="576" text-anchor="middle" class="node-copy">固定刚看见的行为</text>
+    <text x="1210" y="598" text-anchor="middle" class="node-copy">而不是为覆盖率堆用例</text>
+
+    <rect x="104" y="650" width="1228" height="42" rx="10" fill="#d7e8ec"/>
+    <text x="718" y="676" text-anchor="middle" class="phase">每课完成 = 已实现 + 已串联 + 可观察 + 能解释 + 已验证</text>
+  </g>
+
+  <text x="76" y="772" class="section">当前下一课</text>
+  <rect x="76" y="794" width="1288" height="48" rx="12" fill="#315b73"/>
+  <text x="102" y="825" class="badge">A.1 最小终端 Agent：从 main 组装已有 Runtime，先跑通一次“直接回答”；暂不继续 MCP 重连、HTTP 或数据库。</text>
+</svg>
