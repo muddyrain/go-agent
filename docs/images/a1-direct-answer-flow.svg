@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="780" viewBox="0 0 1500 780" role="img" aria-labelledby="title desc">
+  <title id="title">A.1 最小终端 Agent 直接回答调用链</title>
+  <desc id="desc">展示从 main 和 run 创建依赖，经 Factory 创建 Memory、Executor 和 Agent，再由 Agent Run 调用演示 Model 并返回最终消息的过程。</desc>
+  <style>
+    .title{font:700 32px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#17313d}
+    .sub{font:400 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#5b6970}
+    .h{font:700 17px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#19333e}
+    .p{font:400 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#53636b}
+    .small{font:400 12px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#65737a}
+    .tag{font:700 12px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#fff}
+  </style>
+  <rect width="1500" height="780" fill="#f6f4ef"/>
+  <rect x="36" y="28" width="1428" height="724" rx="22" fill="#fff" stroke="#d7dcda"/>
+
+  <text x="70" y="82" class="title">A.1 最小终端 Agent：直接回答</text>
+  <text x="70" y="113" class="sub">真实调用方向：入口组装一次，Agent Loop 调用模型一次；无 ToolCall，因此立即结束</text>
+
+  <rect x="70" y="146" width="1360" height="66" rx="13" fill="#e8f2f5" stroke="#a2c5d0"/>
+  <text x="92" y="175" class="h">应用启动层 · cmd/agenthub</text>
+  <text x="92" y="197" class="p">main() 接收最终错误；run() 加载配置、创建日志、演示 Model、空 Registry 与 FakeTokenizer</text>
+
+  <line x1="750" y1="218" x2="750" y2="239" stroke="#356c82" stroke-width="3"/>
+  <polygon points="742,239 758,239 750,253" fill="#356c82"/>
+
+  <rect x="70" y="258" width="1360" height="108" rx="13" fill="#eff5ed" stroke="#b4cdad"/>
+  <rect x="92" y="278" width="174" height="26" rx="13" fill="#548052"/>
+  <text x="179" y="296" text-anchor="middle" class="tag">agentfactory.Build</text>
+  <text x="92" y="328" class="p">ConfigFromApp(cfg.Agent) → 校验配置和依赖 → 根据 memory.type 创建 Memory → 调用 agent.New()</text>
+  <text x="92" y="350" class="small">当前 sliding 策略创建 SimpleSliding；Factory 负责“如何组装”，不负责模型请求或终端输出</text>
+
+  <line x1="750" y1="371" x2="750" y2="392" stroke="#356c82" stroke-width="3"/>
+  <polygon points="742,392 758,392 750,406" fill="#356c82"/>
+
+  <rect x="70" y="411" width="1360" height="82" rx="13" fill="#eef6f8" stroke="#a2c5d0"/>
+  <rect x="92" y="430" width="124" height="26" rx="13" fill="#356c82"/>
+  <text x="154" y="448" text-anchor="middle" class="tag">agent.New</text>
+  <text x="238" y="448" class="p">保存 Model、Registry、Memory、maxSteps，并用同一个 Registry 创建 Executor</text>
+  <text x="92" y="478" class="small">即使 Registry 为空，Agent 仍可直接回答；Executor 在 A.1 不会执行</text>
+
+  <line x1="750" y1="498" x2="750" y2="519" stroke="#356c82" stroke-width="3"/>
+  <polygon points="742,519 758,519 750,533" fill="#356c82"/>
+
+  <g>
+    <rect x="70" y="538" width="245" height="112" rx="13" fill="#edf5f7" stroke="#9cc3ce"/>
+    <text x="90" y="566" class="h">1 · Agent.Run</text>
+    <text x="90" y="591" class="p">接收 UserMessage</text>
+    <text x="90" y="613" class="p">进入 runWithGenerator</text>
+    <text x="90" y="635" class="small">同步入口传入 model.Generate</text>
+
+    <line x1="320" y1="594" x2="346" y2="594" stroke="#356c82" stroke-width="3"/>
+    <polygon points="346,587 360,594 346,601" fill="#356c82"/>
+
+    <rect x="364" y="538" width="245" height="112" rx="13" fill="#fff7e8" stroke="#d9bb79"/>
+    <text x="384" y="566" class="h">2 · 准备 Request</text>
+    <text x="384" y="591" class="p">Memory.Apply(history)</text>
+    <text x="384" y="613" class="p">Registry.Definitions() = []</text>
+    <text x="384" y="635" class="small">完整历史与模型视图分离</text>
+
+    <line x1="614" y1="594" x2="640" y2="594" stroke="#356c82" stroke-width="3"/>
+    <polygon points="640,587 654,594 640,601" fill="#356c82"/>
+
+    <rect x="658" y="538" width="245" height="112" rx="13" fill="#fff1ec" stroke="#dfa896"/>
+    <text x="678" y="566" class="h">3 · demoModel.Generate</text>
+    <text x="678" y="591" class="p">检查 context</text>
+    <text x="678" y="613" class="p">返回 AssistantMessage</text>
+    <text x="678" y="635" class="small">Usage 为零值，FinishReason=stop</text>
+
+    <line x1="908" y1="594" x2="934" y2="594" stroke="#356c82" stroke-width="3"/>
+    <polygon points="934,587 948,594 934,601" fill="#356c82"/>
+
+    <rect x="952" y="538" width="245" height="112" rx="13" fill="#edf5ed" stroke="#b4cdad"/>
+    <text x="972" y="566" class="h">4 · 判断结束</text>
+    <text x="972" y="591" class="p">追加 AssistantMessage</text>
+    <text x="972" y="613" class="p">ToolCalls 数量为 0</text>
+    <text x="972" y="635" class="small">第 1 次模型调用后结束</text>
+
+    <line x1="1202" y1="594" x2="1228" y2="594" stroke="#356c82" stroke-width="3"/>
+    <polygon points="1228,587 1242,594 1228,601" fill="#356c82"/>
+
+    <rect x="1246" y="538" width="184" height="112" rx="13" fill="#e8f2f5" stroke="#9cc3ce"/>
+    <text x="1266" y="566" class="h">5 · run() 输出</text>
+    <text x="1266" y="591" class="p">FinalMessage</text>
+    <text x="1266" y="613" class="p">Steps = 1</text>
+    <text x="1266" y="635" class="small">Usage = 0 / 0 / 0</text>
+  </g>
+
+  <rect x="70" y="683" width="1360" height="43" rx="10" fill="#f4eee2" stroke="#d9c49d"/>
+  <text x="750" y="710" text-anchor="middle" style="font:700 14px -apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;fill:#6c5429;">A.1 的核心事实：Steps 统计模型调用次数；空 Registry 不阻止模型直接回答；Factory 当前主要隐藏 Memory 的选择与构造</text>
+</svg>

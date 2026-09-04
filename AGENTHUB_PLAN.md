@@ -179,7 +179,7 @@ application starting app=AgentHub env=development address=127.0.0.1:8848
 | 课程 | 本节先看到的问题 | 学习者核心实现 | 用户可见结果 | 状态 |
 |---|---|---|---|---|
 | A.0 现状地图与基线 | 代码很多，但入口只打印启动日志 | 沿入口标出已连接与未连接组件 | 能解释“现在为什么看不到 Agent” | 已审计待讲解 |
-| A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 待开始 |
+| A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 已掌握 |
 | A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 待开始 |
 | A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 待开始 |
 | A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 待开始 |
@@ -211,23 +211,26 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 
 - 当前阶段：**Phase A：恢复可见主线**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 当前课程：**A.0 现状地图与基线，已完成仓库审计，待学习者讲解确认**
+- 已掌握：**A.1 最小终端 Agent：直接回答**
+- A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
+- A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
+- A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**A.1 最小终端 Agent：直接回答**
-- 下一节只做：从应用入口组装现有 Runtime，用最小演示 Model 跑通一次直接回答
-- 下一节明确不做：真实模型、HTTP、流式、MCP、数据库、额外架构抽象
+- 下一节：**A.2 本地工具闭环**
+- 下一节只做：注册一个无外部依赖的本地工具，让演示 Model 经历 `ToolCall → ToolResult → FinalAnswer`
+- 下一节明确不做：真实模型、Eino、HTTP、流式、MCP、数据库、额外架构抽象
 
 ## 9. 下一节理解验收题
 
-A.1 完成前，学习者应能回答：
+A.2 完成前，学习者应能回答：
 
-1. `main` 为什么不能直接包含整个 Agent Loop？
-2. 入口创建了哪些运行时对象，它们的依赖顺序是什么？
-3. 演示 Model 为什么只是教学替身，不属于最终产品能力？
-4. 一条 User Message 在哪些方法之间流动？
-5. `Agent.Run` 的最终回答从哪里产生？
-6. 如果移除 Factory，当前代码会更简单还是更复杂？请基于实际组装代码回答，而不是背设计模式。
-7. 哪一条测试最值得保留来保护这条纵向链路？
+1. 模型为什么只能看到 Tool Definition，而不能直接执行 Go 函数？
+2. Registry 和 Executor 分别负责什么，为什么它们必须共享同一个 Registry？
+3. Assistant ToolCall 为什么必须先进入历史，再追加对应的 ToolMessage？
+4. ToolCall ID 和 Tool Name 各自解决什么问题？
+5. 为什么一次工具闭环通常是两次模型调用，但工具执行次数不计入 `Steps`？
+6. 参数校验失败、普通工具业务错误和 Context 取消为什么不能采用同一种错误处理方式？
+7. 如果没有 Registry 或 Executor，当前代码会出现什么具体耦合或错误？
 
 ## 10. 历史路线处理
 
