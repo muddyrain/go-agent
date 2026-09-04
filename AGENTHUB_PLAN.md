@@ -22,22 +22,32 @@
 - MCP Session、Tool Adapter、多 Server Manager 与命名空间
 - 配置、日志、错误处理、工程命令和大量单元测试
 
-但这些能力还没有进入应用入口。当前执行 `go run ./cmd/agenthub` 只会加载配置、初始化日志并输出启动信息：
+路线校准前，`go run ./cmd/agenthub` 只会加载配置、初始化日志并输出启动信息。现在经过 A.1—A.2，入口已经能运行一条演示 Model—Tool—Model 纵向链路：
 
 ```text
 application starting app=AgentHub env=development address=127.0.0.1:8848
+tool_call: id=call-weather-001 name=get_weather arguments={"city":"杭州"}
+tool_result: id=call-weather-001 name=get_weather content=杭州今天晴，25°C。
+assistant: 根据天气工具的查询结果：杭州今天晴，25°C。
+steps: 2
+usage: input=0 output=0 total=0
 ```
 
-当前还没有：
+当前已经具备：
 
-- 从入口创建并运行一个 Agent
-- 可在终端输入问题并看到回答
-- 生产代码中的真实或演示 Model 实现
-- 一条用户可观察的工具调用链
-- HTTP 服务、聊天接口或 SSE 输出
-- 真实 MCP SDK/传输连接
+- 从入口创建并运行一个 Agent；
+- 一条用户可观察的本地工具调用链；
+- 演示 Model 根据消息历史完成 `ToolCall → ToolMessage → FinalAnswer`；
+- Tool Definition、Registry、Executor、Memory、Factory 和 Agent Loop 的首次纵向串联。
 
-因此，原计划中的“Phase 1 接近完成”只表示**内部组件实现进度**，不代表**可运行产品进度**，也不代表学习者已经理解这些组件。
+当前仍没有：
+
+- 可交互的多轮终端输入；
+- 真实模型和真实 Token Usage；
+- HTTP 服务、聊天接口或 SSE 输出；
+- 真实 MCP SDK/传输连接。
+
+因此，原计划中的“Phase 1 接近完成”只表示**内部组件实现进度**，不代表**可运行产品进度**；A.1—A.2 已开始把这些零件转化为可运行、可观察、可解释的纵向能力。
 
 ### 2.2 教学断点
 
@@ -134,12 +144,12 @@ application starting app=AgentHub env=development address=127.0.0.1:8848
 | 能力 | 实现状态 | 串联/可见状态 | 后续处理 |
 |---|---|---|---|
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
-| Message / Model 协议 | 已实现 | 只在测试中使用 | 通过演示 Model 和真实 Model 串联 |
-| Tool / Registry / Executor | 已实现 | 只在测试中可见 | 用一个本地工具跑通真实 Agent Loop |
-| Agent Loop | 已实现 | 未进入应用入口 | 作为首个纵向切片核心 |
-| Memory | 已实现 | 未能观察裁剪效果 | 在多轮 CLI 中展示前后差异 |
+| Message / Model 协议 | 已实现 | 已由演示 Model 串联两次模型调用 | Phase B 用 Eino 做概念映射，Phase C 接真实模型 |
+| Tool / Registry / Executor | 已实现 | 已通过本地天气工具进入入口并可见 | A.3 复盘职责，Phase D 接真实 MCP |
+| Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环 | A.3 复盘循环与错误边界 |
+| Memory | 已实现 | 已进入入口，但尚未观察裁剪效果 | 在多轮 CLI 中展示前后差异 |
 | Streaming | 已实现 | 未连接终端或网络输出 | 先接终端，再接 SSE |
-| Agent Factory | 已实现 | 仅测试中组装 | 在入口组装后判断是否确有价值 |
+| Agent Factory | 已实现 | 已用于入口组装并创建 Memory | A.3 基于实际组装判断价值与阅读成本 |
 | MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
 | 持久化 | 未实现 | 不可见 | 由“重启后会话丢失”这个问题驱动 |
@@ -180,7 +190,7 @@ application starting app=AgentHub env=development address=127.0.0.1:8848
 |---|---|---|---|---|
 | A.0 现状地图与基线 | 代码很多，但入口只打印启动日志 | 沿入口标出已连接与未连接组件 | 能解释“现在为什么看不到 Agent” | 已审计待讲解 |
 | A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 已掌握 |
-| A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 待开始 |
+| A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 已掌握 |
 | A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 待开始 |
 | A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 待开始 |
 
@@ -211,26 +221,29 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 
 - 当前阶段：**Phase A：恢复可见主线**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答**
+- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环**
 - A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
+- A.2 可见结果：终端按顺序输出 `ToolCall`、`ToolResult`、最终回答和 `steps: 2`
+- A.2 调用链：[`docs/images/a2-local-tool-loop.svg`](docs/images/a2-local-tool-loop.svg)
+- A.2 理解验收：能区分 Definition 与 Handler、Registry 的模型侧与执行侧职责、Tool Name 与 ToolCall ID，并说明 Schema 失败不会进入 Handler，而会作为错误 ToolMessage 交给下一轮模型
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**A.2 本地工具闭环**
-- 下一节只做：注册一个无外部依赖的本地工具，让演示 Model 经历 `ToolCall → ToolResult → FinalAnswer`
-- 下一节明确不做：真实模型、Eino、HTTP、流式、MCP、数据库、额外架构抽象
+- 下一节：**A.3 调用链复盘**
+- 下一节只做：沿真实入口逐文件解释调用者、输入输出、副作用和错误去向，评估现有 Factory、Registry、Executor、Memory 与 Agent Loop 的必要性和阅读成本
+- 下一节明确不做：新增功能、真实模型、Eino、HTTP、流式、MCP、数据库或额外架构抽象
 
 ## 9. 下一节理解验收题
 
-A.2 完成前，学习者应能回答：
+A.3 完成前，学习者应能回答：
 
-1. 模型为什么只能看到 Tool Definition，而不能直接执行 Go 函数？
-2. Registry 和 Executor 分别负责什么，为什么它们必须共享同一个 Registry？
-3. Assistant ToolCall 为什么必须先进入历史，再追加对应的 ToolMessage？
-4. ToolCall ID 和 Tool Name 各自解决什么问题？
-5. 为什么一次工具闭环通常是两次模型调用，但工具执行次数不计入 `Steps`？
-6. 参数校验失败、普通工具业务错误和 Context 取消为什么不能采用同一种错误处理方式？
-7. 如果没有 Registry 或 Executor，当前代码会出现什么具体耦合或错误？
+1. 从 `run()` 到最终回答，实际经过了哪些构造函数和运行方法？
+2. `main.go`、`demo_model.go` 与 `demo_tool.go` 各自承担什么职责，哪些属于教学替身？
+3. Factory 当前替入口隐藏了哪些具体构造细节，又增加了哪些阅读跳转？
+4. Registry 为什么同时保存 Tool 和编译后的 Schema，而不是每次执行时再编译？
+5. Executor 为什么不负责决定调用哪个工具，Agent Loop 为什么不直接执行 Handler？
+6. Memory 在当前四条消息链中实际做了什么；如果 `MaxKeep` 太小，哪类协议消息可能被裁掉？
+7. 现有链路中哪些抽象已被真实场景证明有用，哪些仍只是为后续能力预留？
 
 ## 10. 历史路线处理
 

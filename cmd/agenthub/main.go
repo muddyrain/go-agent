@@ -55,11 +55,24 @@ func run() error {
 		"address", address,
 	)
 
-	model := &demoModel{
-		reply: "你好，我是 AgentHub 的演示 Agent。",
-	}
+	model := &demoModel{}
 
 	registry := tool.NewRegistry()
+	weatherTool, err := newWeatherTool()
+	if err != nil {
+		return apperr.Wrap(
+			apperr.CodeInternal,
+			"create demo weather tool",
+			err,
+		)
+	}
+	if err := registry.Register(weatherTool); err != nil {
+		return apperr.Wrap(
+			apperr.CodeInternal,
+			"register demo weather tool",
+			err,
+		)
+	}
 
 	fakeTokenizer := &tokenizer.FakeTokenizer{
 		PerMessage: 1,
@@ -85,7 +98,7 @@ func run() error {
 	result, err := runtimeAgent.Run(
 		context.Background(),
 		[]llm.Message{
-			llm.UserMessage("请介绍一下你自己"),
+			llm.UserMessage("杭州今天天气怎么样？"),
 		},
 	)
 	if err != nil {
@@ -94,6 +107,30 @@ func run() error {
 			"run demo agent",
 			err,
 		)
+	}
+
+	for _, message := range result.Messages {
+		// tool_call: id=call-weather-001 name=get_weather arguments={"city":"杭州"}
+		if message.Role == llm.RoleAssistant {
+			for _, call := range message.ToolCalls {
+				// 输出 ToolCall
+				fmt.Printf(
+					"tool_call: id=%s name=%s arguments=%s\n",
+					call.ID,
+					call.Name,
+					string(call.Arguments),
+				)
+			}
+		}
+		// tool_result: id=call-weather-001 name=get_weather content=杭州今天晴，25°C。
+		if message.Role == llm.RoleTool {
+			fmt.Printf(
+				"tool_result: id=%s name=%s content=%s\n",
+				message.ToolCallID,
+				message.Name,
+				message.Content,
+			)
+		}
 	}
 
 	fmt.Printf(

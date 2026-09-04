@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900" role="img" aria-labelledby="title desc">
+  <title id="title">A.2 本地工具闭环调用链</title>
+  <desc id="desc">展示用户消息进入 Agent Loop，第一次模型调用产生天气工具调用，Registry 和 Executor 校验并执行工具，工具结果进入历史后触发第二次模型调用并返回最终回答。</desc>
+  <style>
+    .title{font:700 31px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#17313d}
+    .sub{font:400 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#5b6970}
+    .lane{font:700 15px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#1d3a46}
+    .h{font:700 15px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#19333e}
+    .p{font:400 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#4f6068}
+    .small{font:400 12px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#65737a}
+    .tag{font:700 12px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;fill:#fff}
+    .arrow{stroke:#356c82;stroke-width:3;fill:none}
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#356c82"/>
+    </marker>
+    <marker id="errorArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#b7634c"/>
+    </marker>
+  </defs>
+
+  <rect width="1500" height="900" fill="#f6f4ef"/>
+  <rect x="36" y="28" width="1428" height="844" rx="22" fill="#fff" stroke="#d7dcda"/>
+  <text x="70" y="80" class="title">A.2 本地工具闭环：Model → Tool → Model</text>
+  <text x="70" y="111" class="sub">演示数据：杭州晴、25°C；重点是协议与调用顺序，不是真实天气服务</text>
+
+  <rect x="70" y="139" width="1360" height="64" rx="13" fill="#e8f2f5" stroke="#a2c5d0"/>
+  <text x="92" y="166" class="h">启动组装 · cmd/agenthub</text>
+  <text x="92" y="188" class="p">创建 demoModel、get_weather Function 与 Registry；注册工具后由 Factory 组装 Agent、Memory 和共享 Registry 的 Executor</text>
+
+  <text x="92" y="238" class="lane">模型侧：Agent Loop 读取 Definition</text>
+  <line x1="70" y1="250" x2="1430" y2="250" stroke="#d9e4e7"/>
+
+  <rect x="70" y="272" width="220" height="105" rx="13" fill="#eef6f8" stroke="#9cc3ce"/>
+  <text x="88" y="300" class="h">1 · UserMessage</text>
+  <text x="88" y="326" class="p">杭州今天天气怎么样？</text>
+  <text x="88" y="351" class="small">进入完整 history</text>
+
+  <line x1="296" y1="324" x2="335" y2="324" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="342" y="272" width="250" height="105" rx="13" fill="#fff7e8" stroke="#d9bb79"/>
+  <text x="360" y="300" class="h">2 · 构造第 1 次 Request</text>
+  <text x="360" y="326" class="p">Memory.Apply(history)</text>
+  <text x="360" y="348" class="p">Registry.Definitions()</text>
+  <text x="360" y="367" class="small">只把工具说明交给 Model</text>
+
+  <line x1="598" y1="324" x2="637" y2="324" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="644" y="272" width="255" height="105" rx="13" fill="#fff1ec" stroke="#dfa896"/>
+  <text x="662" y="300" class="h">3 · 第 1 次 Model 调用</text>
+  <text x="662" y="326" class="p">demoModel 看到 User + Definition</text>
+  <text x="662" y="348" class="p">返回 Assistant ToolCall</text>
+  <text x="662" y="367" class="small">Steps = 1</text>
+
+  <line x1="905" y1="324" x2="944" y2="324" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="951" y="272" width="479" height="105" rx="13" fill="#edf5ed" stroke="#b4cdad"/>
+  <rect x="971" y="288" width="156" height="25" rx="12" fill="#548052"/>
+  <text x="1049" y="305" text-anchor="middle" class="tag">Assistant ToolCall</text>
+  <text x="971" y="337" class="p">ID = call-weather-001　Name = get_weather</text>
+  <text x="971" y="359" class="p">Arguments = {&quot;city&quot;:&quot;杭州&quot;}　→ 先追加到 history</text>
+
+  <text x="92" y="423" class="lane">执行侧：Executor 用同一个 Registry 找到并执行 Handler</text>
+  <line x1="70" y1="435" x2="1430" y2="435" stroke="#d9e4e7"/>
+
+  <path d="M1190 382 L1190 465 L1074 465" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="794" y="456" width="275" height="122" rx="13" fill="#eef6f8" stroke="#9cc3ce"/>
+  <text x="814" y="484" class="h">4 · Executor.Execute</text>
+  <text x="814" y="510" class="p">检查 ID、Name、Arguments</text>
+  <text x="814" y="532" class="p">Registry.Get(&quot;get_weather&quot;)</text>
+  <text x="814" y="554" class="p">Registry.Validate(arguments)</text>
+
+  <line x1="788" y1="517" x2="749" y2="517" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="480" y="456" width="263" height="122" rx="13" fill="#edf5ed" stroke="#b4cdad"/>
+  <text x="500" y="484" class="h">5 · Function Handler</text>
+  <text x="500" y="510" class="p">解析 weatherArguments</text>
+  <text x="500" y="532" class="p">执行本地 Go 逻辑</text>
+  <text x="500" y="554" class="p">返回“杭州今天晴，25°C。”</text>
+
+  <line x1="474" y1="517" x2="435" y2="517" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="70" y="456" width="359" height="122" rx="13" fill="#fff7e8" stroke="#d9bb79"/>
+  <text x="90" y="484" class="h">6 · 形成 ToolMessage</text>
+  <text x="90" y="510" class="p">Name = get_weather</text>
+  <text x="90" y="532" class="p">ToolCallID = call-weather-001</text>
+  <text x="90" y="554" class="p">Content = 杭州今天晴，25°C。</text>
+
+  <path d="M250 584 L250 628 L342 628" class="arrow" marker-end="url(#arrow)"/>
+
+  <text x="92" y="624" class="lane">回到模型侧：工具结果成为下一轮上下文</text>
+  <line x1="70" y1="636" x2="1430" y2="636" stroke="#d9e4e7"/>
+
+  <rect x="342" y="660" width="270" height="104" rx="13" fill="#fff7e8" stroke="#d9bb79"/>
+  <text x="362" y="688" class="h">7 · 构造第 2 次 Request</text>
+  <text x="362" y="714" class="p">再次 Memory.Apply(history)</text>
+  <text x="362" y="736" class="small">历史含 User、ToolCall、ToolMessage</text>
+
+  <line x1="618" y1="712" x2="657" y2="712" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="664" y="660" width="270" height="104" rx="13" fill="#fff1ec" stroke="#dfa896"/>
+  <text x="684" y="688" class="h">8 · 第 2 次 Model 调用</text>
+  <text x="684" y="714" class="p">最后一条消息 Role = tool</text>
+  <text x="684" y="736" class="small">读取结果并返回最终回答；Steps = 2</text>
+
+  <line x1="940" y1="712" x2="979" y2="712" class="arrow" marker-end="url(#arrow)"/>
+
+  <rect x="986" y="660" width="444" height="104" rx="13" fill="#edf5ed" stroke="#b4cdad"/>
+  <text x="1006" y="688" class="h">9 · Final Assistant</text>
+  <text x="1006" y="714" class="p">根据天气工具的查询结果：杭州今天晴，25°C。</text>
+  <text x="1006" y="736" class="small">无 ToolCalls，Agent Loop 正常结束</text>
+
+  <rect x="70" y="797" width="1360" height="48" rx="10" fill="#f4eee2" stroke="#d9c49d"/>
+  <text x="750" y="827" text-anchor="middle" style="font:700 13px -apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;fill:#6c5429;">错误边界：Schema 失败或普通 Handler 错误 → IsError Result → 错误文本 ToolMessage → 下一轮 Model；取消、超时或协议错误 → Go error → 立即中断</text>
+</svg>
