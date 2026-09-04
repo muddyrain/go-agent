@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="670" viewBox="0 0 1200 670" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub MCP Tool Adapter 调用链</title>
+  <desc id="desc">展示 MCP 工具定义如何转换并注册，以及 Agent Loop 如何通过 Executor、ToolAdapter 和 Session 调用远程 MCP Server。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#52606d"/>
+    </marker>
+    <style>
+      .title{font:700 26px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#17212b}
+      .section{font:600 18px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#243443}
+      .label{font:600 15px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#17212b}
+      .text{font:400 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#52606d}
+      .small{font:400 12px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#52606d}
+      .arrow{stroke:#52606d;stroke-width:2;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+
+  <rect width="1200" height="670" rx="18" fill="#f8fafc"/>
+  <text x="40" y="48" class="title">MCP Tool Adapter：远程协议与 AgentHub Tool 的边界</text>
+
+  <text x="40" y="92" class="section">① 工具发现与注册</text>
+  <rect x="40" y="112" width="190" height="104" rx="13" fill="#eef8f1" stroke="#79bf91"/>
+  <text x="135" y="145" text-anchor="middle" class="label">MCP Server</text>
+  <text x="135" y="171" text-anchor="middle" class="text">提供远程工具</text>
+  <text x="135" y="192" text-anchor="middle" class="small">ToolDefinition</text>
+
+  <path d="M230 164 H285" class="arrow"/>
+  <text x="258" y="150" text-anchor="middle" class="small">ListTools</text>
+
+  <rect x="286" y="112" width="190" height="104" rx="13" fill="#ffffff" stroke="#b8c2cc"/>
+  <text x="381" y="145" text-anchor="middle" class="label">Session</text>
+  <text x="381" y="171" text-anchor="middle" class="text">隐藏连接与传输</text>
+  <text x="381" y="192" text-anchor="middle" class="small">[]ToolDefinition</text>
+
+  <path d="M476 164 H531" class="arrow"/>
+
+  <rect x="532" y="101" width="220" height="126" rx="13" fill="#fff8e8" stroke="#d2a260"/>
+  <text x="642" y="134" text-anchor="middle" class="label">ToolAdapter</text>
+  <text x="642" y="158" text-anchor="middle" class="text">协议模型 → 内部模型</text>
+  <text x="642" y="181" text-anchor="middle" class="small">保存 remoteName</text>
+  <text x="642" y="201" text-anchor="middle" class="small">生成 tool.Definition</text>
+
+  <path d="M752 164 H807" class="arrow"/>
+  <text x="780" y="150" text-anchor="middle" class="small">Register</text>
+
+  <rect x="808" y="112" width="160" height="104" rx="13" fill="#eaf3ff" stroke="#7ea7e8"/>
+  <text x="888" y="145" text-anchor="middle" class="label">Registry</text>
+  <text x="888" y="171" text-anchor="middle" class="text">编译 JSON Schema</text>
+  <text x="888" y="192" text-anchor="middle" class="small">管理 tool.Tool</text>
+
+  <path d="M968 164 H1023" class="arrow"/>
+
+  <rect x="1024" y="112" width="136" height="104" rx="13" fill="#eaf3ff" stroke="#7ea7e8"/>
+  <text x="1092" y="145" text-anchor="middle" class="label">LLM</text>
+  <text x="1092" y="171" text-anchor="middle" class="text">读取工具说明</text>
+  <text x="1092" y="192" text-anchor="middle" class="small">决定 ToolCall</text>
+
+  <line x1="40" y1="258" x2="1160" y2="258" stroke="#dfe4ea"/>
+  <text x="40" y="300" class="section">② 工具执行与结果回传</text>
+
+  <rect x="40" y="321" width="150" height="92" rx="13" fill="#eaf3ff" stroke="#7ea7e8"/>
+  <text x="115" y="354" text-anchor="middle" class="label">Agent Loop</text>
+  <text x="115" y="380" text-anchor="middle" class="text">收到 ToolCall</text>
+
+  <path d="M190 367 H245" class="arrow"/>
+
+  <rect x="246" y="321" width="150" height="92" rx="13" fill="#eaf3ff" stroke="#7ea7e8"/>
+  <text x="321" y="354" text-anchor="middle" class="label">Executor</text>
+  <text x="321" y="380" text-anchor="middle" class="text">校验参数并执行</text>
+
+  <path d="M396 367 H451" class="arrow"/>
+
+  <rect x="452" y="310" width="190" height="114" rx="13" fill="#fff8e8" stroke="#d2a260"/>
+  <text x="547" y="343" text-anchor="middle" class="label">ToolAdapter.Execute</text>
+  <text x="547" y="369" text-anchor="middle" class="text">转发原始工具名与参数</text>
+  <text x="547" y="394" text-anchor="middle" class="small">合并 []Content</text>
+
+  <path d="M642 367 H697" class="arrow"/>
+
+  <rect x="698" y="321" width="150" height="92" rx="13" fill="#ffffff" stroke="#b8c2cc"/>
+  <text x="773" y="354" text-anchor="middle" class="label">Session</text>
+  <text x="773" y="380" text-anchor="middle" class="text">CallTool</text>
+
+  <path d="M848 367 H903" class="arrow"/>
+
+  <rect x="904" y="321" width="180" height="92" rx="13" fill="#eef8f1" stroke="#79bf91"/>
+  <text x="994" y="354" text-anchor="middle" class="label">MCP Server</text>
+  <text x="994" y="380" text-anchor="middle" class="text">执行远程能力</text>
+
+  <path d="M994 413 V452 H547 V425" class="arrow"/>
+  <text x="770" y="446" text-anchor="middle" class="small">CallResult：Content + IsError</text>
+
+  <line x1="40" y1="478" x2="1160" y2="478" stroke="#dfe4ea"/>
+  <text x="40" y="520" class="section">③ 错误语义分流</text>
+
+  <rect x="40" y="543" width="328" height="86" rx="13" fill="#fff4f3" stroke="#e78a82"/>
+  <text x="204" y="574" text-anchor="middle" class="label">MCP 业务失败：IsError = true</text>
+  <text x="204" y="600" text-anchor="middle" class="text">Adapter error → Executor Result.IsError → ToolMessage</text>
+  <text x="204" y="619" text-anchor="middle" class="small">交给下一轮模型理解或修正</text>
+
+  <rect x="436" y="543" width="328" height="86" rx="13" fill="#fff8e8" stroke="#d2a260"/>
+  <text x="600" y="574" text-anchor="middle" class="label">Context 取消或超时</text>
+  <text x="600" y="600" text-anchor="middle" class="text">%w 保留错误链 → errors.Is 可识别</text>
+  <text x="600" y="619" text-anchor="middle" class="small">向上传播并终止当前流程</text>
+
+  <rect x="832" y="543" width="328" height="86" rx="13" fill="#f2f4f7" stroke="#aeb8c2"/>
+  <text x="996" y="574" text-anchor="middle" class="label">普通网络或协议错误</text>
+  <text x="996" y="600" text-anchor="middle" class="text">当前仍按普通工具错误处理</text>
+  <text x="996" y="619" text-anchor="middle" class="small">后续课程再细分、超时与重连</text>
+</svg>
