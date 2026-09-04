@@ -8,6 +8,8 @@
 
 > 先做出一个能运行、能观察、能解释的纵向功能，再围绕真实问题补充抽象、测试和生产能力。
 
+最终产品形态、系统边界、Eino 采用策略和各阶段详细交付见 [`docs/product-blueprint.md`](docs/product-blueprint.md)，总览图见 [`docs/images/agenthub-product-roadmap.svg`](docs/images/agenthub-product-roadmap.svg)。最终目标不是自研 Eino，而是实现一个**基于 Go 与 Eino 的可部署 Agent 应用平台**。
+
 ## 2. 本次路线校准结论
 
 ### 2.1 当前真实状态
@@ -147,98 +149,42 @@ application starting app=AgentHub env=development address=127.0.0.1:8848
 
 ## 6. 校准后的课程路线
 
-### Phase A：恢复可见主线
+完整的产品目标、系统边界、技术选型理由、阶段课程与验收标准见 [`docs/product-blueprint.md`](docs/product-blueprint.md)。主计划只保留阶段导航和当前进度，避免再次被大量细节淹没。
 
-目标：尽快让已有 Runtime 从 `cmd/agenthub` 真正运行，并建立一条学习者能完整解释的调用链。
-
-| 课程 | 本节先看到的问题 | 学习者核心实现 | 用户可见结果 | 主要复用 | 状态 |
-|---|---|---|---|---|---|
-| A.0 现状地图与基线 | 代码很多，但入口只打印启动日志 | 沿入口标出已连接与未连接组件 | 能解释“现在为什么看不到 Agent” | 全仓库现状 | 已审计待讲解 |
-| A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端输入固定问题后看到回答与 step 数 | Message、Model、Memory、Factory、Agent Loop | 待开始 |
-| A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端依次看到 ToolCall、ToolResult、FinalAnswer | Tool、Registry、Executor、Agent Loop | 待开始 |
-| A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答，并指出每层必要性 | A.1—A.2 | 待开始 |
-| A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 现有测试工具 | 待开始 |
-
-A 阶段完成标准：
-
-- `go run ./cmd/agenthub` 不再只打印启动日志，而会真实执行一次 Agent。
-- 学习者能解释 `main → Factory/New → Agent.Run → Model → Executor → Tool → Model → FinalMessage`。
-- 学习者能说明 Registry、Executor、Factory 各自解决的当前问题；若无法说明，则允许简化设计。
-- 不接外部模型、不做 HTTP、不继续 MCP 生命周期，先把本地闭环彻底看懂。
-
-### Phase B：接入真实模型与交互式 CLI
-
-目标：把演示闭环替换成真正可用的终端 Agent，并让流式与 Memory 产生可观察差异。
-
-| 课程 | 场景 | 可见验收 | 状态 |
-|---|---|---|---|
-| B.1 真实 Model Adapter | 演示 Model 不能回答任意问题 | 使用环境变量配置模型；终端得到真实回答；密钥不进入仓库 | 待开始 |
-| B.2 交互式 CLI | 一次运行只能问一个固定问题 | 可连续输入问题、退出，并清楚看到错误 | 待开始 |
-| B.3 真实工具调用 | 模型回答与工具系统尚未真实协作 | 模型自主选择本地工具并基于结果回答 | 待开始 |
-| B.4 Streaming 到终端 | 等完整回答时没有反馈 | 文本增量输出；结束后仍能得到完整结果 | 待开始 |
-| B.5 Memory 可视化 | Memory 存在但效果看不见 | 对比裁剪前历史、模型视图和回答变化 | 待开始 |
-| B.6 Runtime 回顾与减法 | 现有封装可能有过早设计 | 逐层保留、简化或删除，并用测试证明行为不变 | 待开始 |
-
-### Phase C：把 MCP 变成真实能力
-
-目标：先让一个真实 MCP 工具在 CLI 中工作，再处理多 Server 和稳定性问题。
-
-| 课程 | 场景 | 可见验收 | 复用已有代码 | 状态 |
+| 阶段 | 要解决的核心问题 | 用户可见成果 | Runtime 策略 | 状态 |
 |---|---|---|---|---|
-| C.1 单 Server 真实连接 | 目前只有 Session 接口和测试替身 | CLI 能发现并调用一个真实 MCP 工具 | Session、ToolAdapter | 待开始 |
-| C.2 MCP 调用链复盘 | 适配器意义仍可能抽象 | 能解释远程名称、本地名称、协议模型与内部模型 | ToolAdapter | 待开始 |
-| C.3 多 Server 接入 | 两个 Server 可能暴露同名工具 | CLI 列出并调用带命名空间的工具 | Manager、RegisterBatch | 待开始 |
-| C.4 生命周期与超时 | 真实连接才会暴露断线和关闭问题 | 观察超时/断线，随后实现关闭与可测试重连 | 原 1.7.4 内容 | 待开始 |
+| Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 进行中 |
+| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 待开始 |
+| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 待开始 |
+| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
+| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
-### Phase D：HTTP 与流式 API
+### 里程碑
 
-目标：把已经工作的 CLI 能力暴露为最小服务，不先做完整 API 平台。
+| 里程碑 | 完成后能做什么 | 阶段 |
+|---|---|---|
+| M0 看懂内核 | 能运行并解释一次模型—工具闭环 | A |
+| M1 可用 CLI Agent | 能与真实模型多轮、流式对话并调用工具/MCP | B—D |
+| M2 Agent 服务 MVP | 能通过 API 和 Web Playground 使用，数据可保存 | E—F |
+| M3 知识 Agent | 能上传文档并获得带引用的回答 | G |
+| M4 编排平台 | 能运行一个可观察、可恢复的复杂任务流程 | H |
+| V1 可部署 AgentHub | 能从零启动并完成配置、问答、工具、知识库和观测演示 | I |
 
-1. `GET /health`：理解 Server 生命周期与健康检查。
-2. `POST /chat`：复用同一个 Agent 用例，而不是重写业务逻辑。
-3. SSE `/chat/stream`：把已经理解的流事件映射到网络输出。
-4. 请求日志、恢复、请求 ID 与错误映射：由真实请求失败驱动。
-5. OpenAPI：接口稳定后再补文档。
+### Phase A 当前课程
 
-### Phase E：会话持久化
+| 课程 | 本节先看到的问题 | 学习者核心实现 | 用户可见结果 | 状态 |
+|---|---|---|---|---|
+| A.0 现状地图与基线 | 代码很多，但入口只打印启动日志 | 沿入口标出已连接与未连接组件 | 能解释“现在为什么看不到 Agent” | 已审计待讲解 |
+| A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 待开始 |
+| A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 待开始 |
+| A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 待开始 |
+| A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 待开始 |
 
-目标：解决“服务重启后对话丢失”，而不是先学习数据库基础设施。
-
-1. 先定义最小会话行为和内存实现。
-2. 用 SQLite 或 PostgreSQL 完成第一条可运行持久化链路；具体选择在本阶段开始前根据学习目标确认。
-3. 再引入迁移、Repository、连接池和事务。
-4. 最后按真实需要加入 Redis 缓存、状态或限流。
-
-### Phase F：RAG 纵向切片
-
-目标：上传一个小文档并通过 Agent 回答可核对的问题。
-
-1. 文档输入与最小切分。
-2. Embedding 与向量存储。
-3. 检索结果可视化与引用。
-4. RAG Agent 闭环。
-5. 混合检索、重排和知识库 API 只在基础效果可见后加入。
-
-### Phase G：Workflow 与 Multi-Agent
-
-目标：用一个单 Agent 明显不适合的任务证明编排价值。
-
-1. 先选定具体任务和单 Agent 基线。
-2. Router 或 Orchestrator-Worker 二选一实现最小版本。
-3. 观察任务拆分、状态、失败和结果聚合。
-4. 再加入条件分支、并行、Human-in-the-loop 和共享上下文。
-
-### Phase H：生产化与部署
-
-目标：围绕已经存在的 CLI/API/RAG 链路做生产保障。
-
-- OpenTelemetry：跟踪一次真实 Agent 请求。
-- Prometheus：暴露请求、模型、工具和 Token 指标。
-- 超时、重试、限流、熔断与优雅退出。
-- 集成测试、Benchmark 与 pprof。
-- Docker、Compose、多环境配置和 CI。
-
-生产化能力不再提前于真实业务链路实现。
+Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生命周期。A 阶段结束后立即进入 Eino 对照实验，不再扩建第二套生产 Runtime。
 
 ## 7. 每节课的计划记录模板
 
@@ -264,6 +210,7 @@ A 阶段完成标准：
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase A：恢复可见主线**
+- 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
 - 当前课程：**A.0 现状地图与基线，已完成仓库审计，待学习者讲解确认**
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
 - 下一节：**A.1 最小终端 Agent：直接回答**
