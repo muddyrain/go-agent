@@ -117,9 +117,9 @@
 ## 4. 当前进度
 
 - 当前阶段：**Phase 1 Agent Runtime 正在进行 1.7 MCP**
-- 当前课程：**1.7.2 MCP Tool Adapter，待开始**
-- 最近完成：**1.7.1 MCP Host、Session、Server 边界及远程工具协议模型**
-- 下一验收目标：把 MCP ToolDefinition 与 CallResult 适配为现有 `tool.Tool`，复用 Registry、Executor 与 Agent Loop
+- 当前课程：**1.7.3 多 Server 管理与工具名称冲突，待开始**
+- 最近完成：**1.7.2 MCP Tool Adapter，将远程工具接入 Registry 与 Executor**
+- 下一验收目标：管理多个 MCP Session，为远程工具生成稳定且不冲突的本地名称，并完成批量发现与注册
 
 ## 5. 验收记录
 
@@ -235,3 +235,12 @@
 - 关键概念：Host/Client/Session/Server 职责、MCP 协议模型与内部 Tool 模型隔离、一次调用的多内容块、工具业务错误与流程错误分层，以及由 SDK Adapter 隐藏生命周期和传输差异
 - 当前边界：只定义稳定的客户端会话抽象和测试替身，尚未实现 MCP Tool Adapter、真实 SDK、传输或网络连接
 - 下一步：实现 MCP Tool Adapter，将远程工具注册到现有 Registry 并通过 Executor 调用
+
+### 1.7.2 MCP Tool Adapter
+
+- 状态：✅ 已完成
+- 产出：将 MCP `ToolDefinition` 转换为内部 `tool.Definition` 的 `ToolAdapter`，通过 `Session.CallTool` 执行远程工具，合并文本内容块，并接入现有 Registry 与 Executor
+- 验证：定义转换、名称与参数转发、多文本块合并、MCP 业务失败转换、Context 取消、构造参数校验和 Executor 集成测试通过；`internal/mcpclient` 数据竞争检查与 `make check` 通过
+- 关键概念：适配器模式、远程名称与模型可见名称分离、JSON 语法校验与 Schema 编译职责分层、`json.RawMessage` 防御性复制、`%w` 保留错误链、编译期接口断言，以及 MCP 业务错误到 Tool Result 的转换
+- 当前边界：仅支持文本内容块；普通网络和协议错误仍按普通工具错误进入模型，精细错误分类、超时和重连留待后续实现
+- 下一步：实现多 MCP Server 的 Session 管理、工具批量发现、命名空间和名称冲突处理

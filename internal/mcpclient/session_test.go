@@ -7,10 +7,12 @@ import (
 )
 
 type stubSession struct {
-	tools      []ToolDefinition
-	callResult CallResult
-	err        error
-	closed     bool
+	tools           []ToolDefinition
+	callResult      CallResult
+	err             error
+	closed          bool
+	calledName      string
+	calledArguments json.RawMessage
 }
 
 func (s *stubSession) ListTools(
@@ -26,13 +28,18 @@ func (s *stubSession) ListTools(
 
 func (s *stubSession) CallTool(
 	ctx context.Context,
-	_ string,
-	_ json.RawMessage,
+	name string,
+	arguments json.RawMessage,
 ) (CallResult, error) {
 	select {
 	case <-ctx.Done():
 		return CallResult{}, ctx.Err()
 	default:
+		s.calledName = name
+		s.calledArguments = cloneJSON(
+			arguments,
+		)
+
 		return s.callResult, s.err
 	}
 }
