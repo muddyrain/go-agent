@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"agenthub/internal/agent"
 	"agenthub/internal/agentfactory"
 	"agenthub/internal/apperr"
 	"agenthub/internal/config"
@@ -55,58 +56,9 @@ func run() error {
 		"address", address,
 	)
 
-	model := &demoModel{}
-
-	registry := tool.NewRegistry()
-	weatherTool, err := newWeatherTool()
+	result, err := runDemoAgent(context.Background(), cfg.Agent)
 	if err != nil {
-		return apperr.Wrap(
-			apperr.CodeInternal,
-			"create demo weather tool",
-			err,
-		)
-	}
-	if err := registry.Register(weatherTool); err != nil {
-		return apperr.Wrap(
-			apperr.CodeInternal,
-			"register demo weather tool",
-			err,
-		)
-	}
-
-	fakeTokenizer := &tokenizer.FakeTokenizer{
-		PerMessage: 1,
-	}
-
-	runtimeAgent, err := agentfactory.Build(
-		agentfactory.ConfigFromApp(cfg.Agent),
-		agentfactory.Dependencies{
-			Model:     model,
-			Registry:  registry,
-			Tokenizer: fakeTokenizer,
-		},
-	)
-
-	if err != nil {
-		return apperr.Wrap(
-			apperr.CodeInternal,
-			"build demo agent",
-			err,
-		)
-	}
-
-	result, err := runtimeAgent.Run(
-		context.Background(),
-		[]llm.Message{
-			llm.UserMessage("杭州今天天气怎么样？"),
-		},
-	)
-	if err != nil {
-		return apperr.Wrap(
-			apperr.CodeInternal,
-			"run demo agent",
-			err,
-		)
+		return err
 	}
 
 	for _, message := range result.Messages {
@@ -141,5 +93,71 @@ func run() error {
 		result.Usage.OutputTokens,
 		result.Usage.TotalTokens,
 	)
+
 	return nil
+}
+
+func runDemoAgent(
+	ctx context.Context,
+	cfg config.AgentConfig,
+) (agent.RunResult, error) {
+	// 从现有 run() 搬入：
+	// 1. 创建 demoModel
+	model := &demoModel{}
+	// 2. 创建 Registry
+	registry := tool.NewRegistry()
+
+	// 3. 创建并注册天气工具
+	weatherTool, err := newWeatherTool()
+	if err != nil {
+		return agent.RunResult{}, apperr.Wrap(
+			apperr.CodeInternal,
+			"create demo weather tool",
+			err,
+		)
+	}
+	if err := registry.Register(weatherTool); err != nil {
+		return agent.RunResult{}, apperr.Wrap(
+			apperr.CodeInternal,
+			"register demo weather tool",
+			err,
+		)
+	}
+	// 4. 创建 FakeTokenizer
+	fakeTokenizer := &tokenizer.FakeTokenizer{
+		PerMessage: 1,
+	}
+
+	// 5. agentfactory.Build
+	runtimeAgent, err := agentfactory.Build(
+		agentfactory.ConfigFromApp(cfg),
+		agentfactory.Dependencies{
+			Model:     model,
+			Registry:  registry,
+			Tokenizer: fakeTokenizer,
+		},
+	)
+	if err != nil {
+		return agent.RunResult{}, apperr.Wrap(
+			apperr.CodeInternal,
+			"build demo agent",
+			err,
+		)
+	}
+	// 6. runtimeAgent.Run
+	result, err := runtimeAgent.Run(
+		ctx,
+		[]llm.Message{
+			llm.UserMessage("杭州今天天气怎么样？"),
+		},
+	)
+	if err != nil {
+		return agent.RunResult{}, apperr.Wrap(
+			apperr.CodeInternal,
+			"run demo agent",
+			err,
+		)
+	}
+
+	return result, nil
 }

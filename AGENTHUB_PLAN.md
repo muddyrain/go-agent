@@ -147,7 +147,7 @@ usage: input=0 output=0 total=0
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
 | Message / Model 协议 | 已实现 | 已由演示 Model 串联两次模型调用 | Phase B 用 Eino 做概念映射，Phase C 接真实模型 |
 | Tool / Registry / Executor | 已实现 | 已通过本地天气工具进入入口并可见，职责边界已复盘 | Phase D 接真实 MCP |
-| Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环，循环与错误边界已复盘 | A.4 用最小入口测试保护主链 |
+| Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环，循环与错误边界已复盘，并由最小入口测试保护 | Phase B 用 Eino 复现同一闭环 |
 | Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
 | Streaming | 已实现 | 未连接终端或网络输出 | 先接终端，再接 SSE |
 | Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
@@ -164,7 +164,7 @@ usage: input=0 output=0 total=0
 
 | 阶段 | 要解决的核心问题 | 用户可见成果 | Runtime 策略 | 状态 |
 |---|---|---|---|---|
-| Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 进行中 |
+| Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 待开始 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 待开始 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
@@ -193,7 +193,7 @@ usage: input=0 output=0 total=0
 | A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 已掌握 |
 | A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 已掌握 |
 | A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 已掌握 |
-| A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 待开始 |
+| A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 已掌握 |
 
 Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生命周期。A 阶段结束后立即进入 Eino 对照实验，不再扩建第二套生产 Runtime。
 
@@ -220,9 +220,9 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase A：恢复可见主线**
+- 当前阶段：**Phase A 已完成，准备进入 Phase B：Eino 对照实验**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘**
+- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试**
 - A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -233,20 +233,18 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 - A.3 复盘结论：`main.go` 是组合根；Factory 只创建 Memory 并组装 Agent；`Agent.Run` 是同步薄入口，`runWithGenerator` 承担循环；Registry 是工具事实来源，Executor 执行已确定的 ToolCall，Model 决定调用什么工具，Agent Loop 推进历史和步骤
 - A.3 抽象判断：Registry、Executor、Message 协议和 Agent Loop 已被真实闭环证明；Factory 有实际价值但阅读成本偏高；Memory 已进入链路但协议安全裁剪仍待验证；MCP、HTTP、持久化、RAG 等尚未被当前入口证明
 - A.3 风险发现：`SimpleSliding` 按单条消息裁剪，`MaxKeep` 太小时可能保留孤立 ToolMessage，拆散 Assistant ToolCall 与 ToolMessage 的协议关联
+- A.4 最小测试：`cmd/agenthub/main_test.go` 直接调用 `runDemoAgent`，保护真实 `demoModel`、天气 Tool、Registry、Factory 与 Agent Loop 的纵向组装
+- A.4 稳定断言：四条消息按 User → Assistant ToolCall → Tool → Final Assistant 排列，Tool Name 与 Call ID 前后对应，工具结果进入最终回答，且 `Steps == 2`
+- A.4 边界结论：`runDemoAgent` 隔离可验证的业务组装，`run` 保留配置、日志与终端展示；入口测试不重复包内单测已经覆盖的 Agent Loop 内部异常分支
+- A.4 理解验收：能解释为何不直接测试混合配置和输出的 `run`、为何入口只保护跨组件闭环，以及 Call ID 与 Steps 分别证明调用关联和两轮模型执行
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**A.4 最小入口测试**
-- 下一节只做：为当前纵向切片增加一个最小 smoke/integration test，保护真实组装、四条消息顺序和 `steps: 2`
-- 下一节明确不做：扩大单测矩阵、重构生产代码、真实模型、Eino、HTTP、流式、MCP、数据库或额外架构抽象
+- 下一节：**B.1 Eino 最小直接回答对照**
+- 下一节只做：引入 Eino 的最小依赖，用 Eino 跑通与 A.1 等价的一轮直接回答，并把自研 Model、Message、Agent.Run 概念映射到 Eino
+- 下一节明确不做：删除自研 Runtime、真实模型、工具调用、HTTP、流式、MCP、数据库或额外架构抽象
 
 ## 9. 下一节理解验收题
 
-A.4 只进行一轮集中验收。学习者回答后直接统一修正并给出结论，不围绕同一知识点追加多轮口试。完成前应能回答：
-
-1. 为什么当前最值得保护的是从真实组装到四条消息顺序的纵向行为，而不是再给每个构造函数补测试？
-2. 这个入口测试应该断言哪些稳定行为，哪些演示文案或实现细节不值得锁死？
-3. 测试应直接调用 `run()`、抽出可测试的组装函数，还是只测试已有 `Agent.Run`；各自会保护什么边界？
-4. 如何让测试同时证明 ToolCall、ToolMessage 的 Call ID 对应，以及 `Steps == 2`？
-5. 为什么 A.4 只增加一个最小纵向测试，不扩展成新的测试矩阵？
+B.1 只进行一轮集中验收。学习者回答后直接统一修正并给出结论，不围绕同一知识点追加多轮口试。开始前应先明确 Eino 最小直接回答用例与 A.1 的一一对应关系；具体题目在完成 B.1 可见结果后给出。
 
 ## 10. 历史路线处理
 
