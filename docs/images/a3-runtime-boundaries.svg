@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
+  <rect width="1500" height="900" fill="#f6f4ef"/>
+  <rect x="35" y="28" width="1430" height="844" rx="24" fill="#ffffff" stroke="#d9dfdf" stroke-width="1.5"/>
+
+  <style>
+    .title { font: 700 24px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #18313d; }
+    .subtitle { font: 400 15px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #61717a; }
+    .section { font: 700 16px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #26434f; }
+    .name { font: 700 16px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #19323d; }
+    .body { font: 400 14px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #40545e; }
+    .small { font: 400 13px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; fill: #536770; }
+    .badge { font: 700 12px -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+  </style>
+
+  <text x="70" y="75" class="title">A.3 调用链复盘：职责边界与抽象价值</text>
+  <text x="70" y="107" class="subtitle">判断方法：不是看名字是否专业，而是看删除后谁会承担它的职责</text>
+
+  <text x="70" y="155" class="section">一、真实运行链中的三个核心边界</text>
+  <line x1="70" y1="168" x2="1430" y2="168" stroke="#dce5e7" stroke-width="1.5"/>
+
+  <rect x="70" y="195" width="390" height="180" rx="16" fill="#edf7f2" stroke="#a9cdb7" stroke-width="1.5"/>
+  <text x="95" y="228" class="name">Registry · 工具事实来源</text>
+  <text x="95" y="260" class="body">• 注册 Tool，并在注册时编译 Schema</text>
+  <text x="95" y="288" class="body">• Definitions() 给 Model 看协议</text>
+  <text x="95" y="316" class="body">• Get / Validate 给 Executor 执行</text>
+  <text x="95" y="346" class="small">删除后：模型侧与执行侧会维护两份工具状态</text>
+
+  <path d="M470 285 H535" stroke="#39778b" stroke-width="3" fill="none"/>
+  <path d="M525 278 L538 285 L525 292" fill="#39778b"/>
+
+  <rect x="555" y="195" width="390" height="180" rx="16" fill="#edf5f8" stroke="#9fc7d5" stroke-width="1.5"/>
+  <text x="580" y="228" class="name">Executor · 执行一个已确定的 ToolCall</text>
+  <text x="580" y="260" class="body">• 检查 ID、Name 与 JSON 协议</text>
+  <text x="580" y="288" class="body">• 查找 Tool、校验 Schema、调用 Handler</text>
+  <text x="580" y="316" class="body">• 区分可交给 Model 的错误与流程错误</text>
+  <text x="580" y="346" class="small">不负责决定调用哪个工具</text>
+
+  <path d="M955 285 H1020" stroke="#39778b" stroke-width="3" fill="none"/>
+  <path d="M1010 278 L1023 285 L1010 292" fill="#39778b"/>
+
+  <rect x="1040" y="195" width="390" height="180" rx="16" fill="#fff5e8" stroke="#dfbd82" stroke-width="1.5"/>
+  <text x="1065" y="228" class="name">Agent Loop · 推进消息与模型步骤</text>
+  <text x="1065" y="260" class="body">• 每轮应用 Memory，构造 Model Request</text>
+  <text x="1065" y="288" class="body">• 追加 Assistant ToolCall 与 ToolMessage</text>
+  <text x="1065" y="316" class="body">• 累加 Usage，控制 maxSteps 与最终退出</text>
+  <text x="1065" y="346" class="small">Model 决定调用什么；Loop 负责执行该决定</text>
+
+  <text x="70" y="425" class="section">二、删除实验：当前价值分级</text>
+  <line x1="70" y1="438" x2="1430" y2="438" stroke="#dce5e7" stroke-width="1.5"/>
+
+  <rect x="70" y="465" width="430" height="280" rx="16" fill="#eef7ed" stroke="#acd0ae" stroke-width="1.5"/>
+  <rect x="94" y="487" width="118" height="28" rx="14" fill="#4f8756"/>
+  <text x="153" y="506" text-anchor="middle" class="badge" fill="#ffffff">已被闭环证明</text>
+  <text x="95" y="552" class="name">Model / Message 协议</text>
+  <text x="95" y="580" class="small">隔离具体模型；表达 ToolCall 与 ToolMessage 关联</text>
+  <text x="95" y="620" class="name">Registry / Executor</text>
+  <text x="95" y="648" class="small">统一工具状态；集中查找、校验、执行和错误分层</text>
+  <text x="95" y="688" class="name">Agent Loop</text>
+  <text x="95" y="716" class="small">真实完成两次 Model 调用、一次 Tool 执行、四条消息</text>
+
+  <rect x="535" y="465" width="430" height="280" rx="16" fill="#fff8eb" stroke="#e3c789" stroke-width="1.5"/>
+  <rect x="559" y="487" width="150" height="28" rx="14" fill="#a87a28"/>
+  <text x="634" y="506" text-anchor="middle" class="badge" fill="#ffffff">有价值，仍待验证</text>
+  <text x="560" y="552" class="name">Factory</text>
+  <text x="560" y="580" class="small">两种 Memory 策略带来价值，但增加阅读跳转</text>
+  <text x="560" y="620" class="name">Memory</text>
+  <text x="560" y="648" class="small">已进入链路但未实际裁剪；按单消息裁剪有协议风险</text>
+  <text x="560" y="688" class="name">responseGenerator / Function</text>
+  <text x="560" y="716" class="small">减少同步流式与轻量 Tool 样板，尚未完整实证</text>
+
+  <rect x="1000" y="465" width="430" height="280" rx="16" fill="#fff1ed" stroke="#e0aca2" stroke-width="1.5"/>
+  <rect x="1024" y="487" width="132" height="28" rx="14" fill="#a75b50"/>
+  <text x="1090" y="506" text-anchor="middle" class="badge" fill="#ffffff">当前闭环未使用</text>
+  <text x="1025" y="552" class="name">MCP Session / Adapter / Manager</text>
+  <text x="1025" y="580" class="small">尚无真实传输，也未进入应用入口</text>
+  <text x="1025" y="620" class="name">HTTP / SSE / 持久化</text>
+  <text x="1025" y="648" class="small">删除后不影响当前终端工具闭环</text>
+  <text x="1025" y="688" class="name">RAG / Workflow / Multi-Agent</text>
+  <text x="1025" y="716" class="small">等待具体用户场景证明，不提前扩建</text>
+
+  <rect x="70" y="785" width="1360" height="52" rx="12" fill="#edf5f8" stroke="#b5d0da" stroke-width="1.2"/>
+  <text x="750" y="817" text-anchor="middle" class="section">结论：保留已解决真实问题的边界；有价值但偏重的封装继续观察；未进入主线的能力不再提前扩建</text>
+</svg>

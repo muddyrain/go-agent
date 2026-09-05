@@ -103,7 +103,8 @@ usage: input=0 output=0 total=0
 6. **先运行功能**：先确认真实入口产生预期效果。
 7. **再写最小测试**：只固定本节新增行为和关键失败边界。
 8. **回看抽象**：用刚出现的问题解释为什么需要或不需要封装。
-9. **口头验收与 Git 检查点**：学习者解释清楚后才完成课程。
+9. **一轮理解验收**：每节只集中提问一轮；学习者回答后，直接指出正确部分、统一修正偏差并给出结论，不因非阻塞性偏差继续追加口试。
+10. **Git 检查点**：只有会阻碍下一节的关键误解才需先澄清，否则完成总结后进入检查点。
 
 ### 4.2 文件与方法解释模板
 
@@ -145,11 +146,11 @@ usage: input=0 output=0 total=0
 |---|---|---|---|
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
 | Message / Model 协议 | 已实现 | 已由演示 Model 串联两次模型调用 | Phase B 用 Eino 做概念映射，Phase C 接真实模型 |
-| Tool / Registry / Executor | 已实现 | 已通过本地天气工具进入入口并可见 | A.3 复盘职责，Phase D 接真实 MCP |
-| Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环 | A.3 复盘循环与错误边界 |
-| Memory | 已实现 | 已进入入口，但尚未观察裁剪效果 | 在多轮 CLI 中展示前后差异 |
+| Tool / Registry / Executor | 已实现 | 已通过本地天气工具进入入口并可见，职责边界已复盘 | Phase D 接真实 MCP |
+| Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环，循环与错误边界已复盘 | A.4 用最小入口测试保护主链 |
+| Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
 | Streaming | 已实现 | 未连接终端或网络输出 | 先接终端，再接 SSE |
-| Agent Factory | 已实现 | 已用于入口组装并创建 Memory | A.3 基于实际组装判断价值与阅读成本 |
+| Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
 | MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
 | 持久化 | 未实现 | 不可见 | 由“重启后会话丢失”这个问题驱动 |
@@ -191,7 +192,7 @@ usage: input=0 output=0 total=0
 | A.0 现状地图与基线 | 代码很多，但入口只打印启动日志 | 沿入口标出已连接与未连接组件 | 能解释“现在为什么看不到 Agent” | 已审计待讲解 |
 | A.1 最小终端 Agent：直接回答 | `main` 没有创建 Agent | 写最小演示 Model，并从入口组装、运行一次 Agent | 终端看到回答与 step 数 | 已掌握 |
 | A.2 本地工具闭环 | 直接回答还看不出 Agent 与普通聊天的差别 | 注册一个简单本地工具，让演示 Model 先请求工具再回答 | 终端看到 ToolCall、ToolResult 和 FinalAnswer | 已掌握 |
-| A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 待开始 |
+| A.3 调用链复盘 | 能运行但仍可能只会照着写 | 为真实链路画图并逐方法解释；不新增功能 | 能从 `main` 讲到最终回答并指出每层必要性 | 已掌握 |
 | A.4 最小入口测试 | 已有单测很多，但入口行为没有保护 | 为纵向切片写一个最小 smoke/integration test | 改坏组装或消息顺序时测试失败 | 待开始 |
 
 Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生命周期。A 阶段结束后立即进入 Eino 对照实验，不再扩建第二套生产 Runtime。
@@ -221,29 +222,31 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 
 - 当前阶段：**Phase A：恢复可见主线**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环**
+- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘**
 - A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
 - A.2 可见结果：终端按顺序输出 `ToolCall`、`ToolResult`、最终回答和 `steps: 2`
 - A.2 调用链：[`docs/images/a2-local-tool-loop.svg`](docs/images/a2-local-tool-loop.svg)
 - A.2 理解验收：能区分 Definition 与 Handler、Registry 的模型侧与执行侧职责、Tool Name 与 ToolCall ID，并说明 Schema 失败不会进入 Handler，而会作为错误 ToolMessage 交给下一轮模型
+- A.3 职责与价值图：[`docs/images/a3-runtime-boundaries.svg`](docs/images/a3-runtime-boundaries.svg)
+- A.3 复盘结论：`main.go` 是组合根；Factory 只创建 Memory 并组装 Agent；`Agent.Run` 是同步薄入口，`runWithGenerator` 承担循环；Registry 是工具事实来源，Executor 执行已确定的 ToolCall，Model 决定调用什么工具，Agent Loop 推进历史和步骤
+- A.3 抽象判断：Registry、Executor、Message 协议和 Agent Loop 已被真实闭环证明；Factory 有实际价值但阅读成本偏高；Memory 已进入链路但协议安全裁剪仍待验证；MCP、HTTP、持久化、RAG 等尚未被当前入口证明
+- A.3 风险发现：`SimpleSliding` 按单条消息裁剪，`MaxKeep` 太小时可能保留孤立 ToolMessage，拆散 Assistant ToolCall 与 ToolMessage 的协议关联
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**A.3 调用链复盘**
-- 下一节只做：沿真实入口逐文件解释调用者、输入输出、副作用和错误去向，评估现有 Factory、Registry、Executor、Memory 与 Agent Loop 的必要性和阅读成本
-- 下一节明确不做：新增功能、真实模型、Eino、HTTP、流式、MCP、数据库或额外架构抽象
+- 下一节：**A.4 最小入口测试**
+- 下一节只做：为当前纵向切片增加一个最小 smoke/integration test，保护真实组装、四条消息顺序和 `steps: 2`
+- 下一节明确不做：扩大单测矩阵、重构生产代码、真实模型、Eino、HTTP、流式、MCP、数据库或额外架构抽象
 
 ## 9. 下一节理解验收题
 
-A.3 完成前，学习者应能回答：
+A.4 只进行一轮集中验收。学习者回答后直接统一修正并给出结论，不围绕同一知识点追加多轮口试。完成前应能回答：
 
-1. 从 `run()` 到最终回答，实际经过了哪些构造函数和运行方法？
-2. `main.go`、`demo_model.go` 与 `demo_tool.go` 各自承担什么职责，哪些属于教学替身？
-3. Factory 当前替入口隐藏了哪些具体构造细节，又增加了哪些阅读跳转？
-4. Registry 为什么同时保存 Tool 和编译后的 Schema，而不是每次执行时再编译？
-5. Executor 为什么不负责决定调用哪个工具，Agent Loop 为什么不直接执行 Handler？
-6. Memory 在当前四条消息链中实际做了什么；如果 `MaxKeep` 太小，哪类协议消息可能被裁掉？
-7. 现有链路中哪些抽象已被真实场景证明有用，哪些仍只是为后续能力预留？
+1. 为什么当前最值得保护的是从真实组装到四条消息顺序的纵向行为，而不是再给每个构造函数补测试？
+2. 这个入口测试应该断言哪些稳定行为，哪些演示文案或实现细节不值得锁死？
+3. 测试应直接调用 `run()`、抽出可测试的组装函数，还是只测试已有 `Agent.Run`；各自会保护什么边界？
+4. 如何让测试同时证明 ToolCall、ToolMessage 的 Call ID 对应，以及 `Steps == 2`？
+5. 为什么 A.4 只增加一个最小纵向测试，不扩展成新的测试矩阵？
 
 ## 10. 历史路线处理
 
