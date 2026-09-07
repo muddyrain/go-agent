@@ -262,37 +262,32 @@ CLI / Web Console / External Client
 
 ### 课程拆分
 
-#### B.1 冻结自研基线
+#### B.1 Eino 最小直接回答对照
 
-- 固定 Phase A 的输入、输出、工具行为和关键错误。
-- 不再给自研 Runtime 添加新特性。
-- 记录对照实验必须保持一致的行为。
-
-#### B.2 Eino 最小直接回答
-
+- Phase A 的自研 Runtime 作为冻结基线，不再添加新特性。
 - 引入并锁定明确版本的 Eino。
-- 使用 Eino ChatModel/Agent 运行与 A.1 相同的直接回答。
-- 对照项目 Message、Model、Agent 与 Eino 类型。
+- 使用 Eino ChatModel 与 Chain 运行和 A.1 等价的直接回答。
+- 对照项目 Message、Model、Agent.Run 与 Eino 的 schema.Message、BaseChatModel、Chain/Runnable。
 
-#### B.3 Eino 工具闭环
+#### B.2 Eino 工具闭环
 
 - 使用 Eino Tool 与 Agent 复现 A.2。
 - 对照自研 Registry/Executor/Loop 与 Eino Tool/ToolsNode/Agent。
 - 观察 Eino 如何管理工具绑定、历史和结束条件。
 
-#### B.4 流式和回调观察
+#### B.3 流式和回调观察
 
 - 用最小例子观察 Eino 的流式输出。
 - 添加回调记录模型与工具节点的开始、结束和错误。
 - 不先封装，先看框架真实行为。
 
-#### B.5 架构决策与生产切换
+#### B.4 架构决策与生产切换
 
 - 写 ADR，记录为什么生产主线采用 Eino。
 - 确定 AgentHub 应用层与 Eino 之间最小适配边界。
 - 保证生产入口只选择一套 Runtime。
 
-#### B.6 清理双轨风险
+#### B.5 清理双轨风险
 
 - 自研 Runtime 明确标记为学习实现，或迁移到独立学习目录。
 - 删除没有继续保留价值的重复生产封装和测试。

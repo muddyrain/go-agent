@@ -145,7 +145,7 @@ usage: input=0 output=0 total=0
 | 能力 | 实现状态 | 串联/可见状态 | 后续处理 |
 |---|---|---|---|
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
-| Message / Model 协议 | 已实现 | 已由演示 Model 串联两次模型调用 | Phase B 用 Eino 做概念映射，Phase C 接真实模型 |
+| Message / Model 协议 | 已实现 | 自研与 Eino 的最小直接回答均已进入独立入口，可对照消息与模型接口 | B.2 用 Eino 复现工具闭环，Phase C 接真实模型 |
 | Tool / Registry / Executor | 已实现 | 已通过本地天气工具进入入口并可见，职责边界已复盘 | Phase D 接真实 MCP |
 | Agent Loop | 已实现 | 已在入口完成 Model—Tool—Model 闭环，循环与错误边界已复盘，并由最小入口测试保护 | Phase B 用 Eino 复现同一闭环 |
 | Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
@@ -165,7 +165,7 @@ usage: input=0 output=0 total=0
 | 阶段 | 要解决的核心问题 | 用户可见成果 | Runtime 策略 | 状态 |
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
-| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 待开始 |
+| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 进行中：B.1 已掌握 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 待开始 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
@@ -197,6 +197,15 @@ usage: input=0 output=0 total=0
 
 Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生命周期。A 阶段结束后立即进入 Eino 对照实验，不再扩建第二套生产 Runtime。
 
+### Phase B 当前课程
+
+| 课程 | 本节先看到的问题 | 学习者核心实现 | 用户可见结果 | 状态 |
+|---|---|---|---|---|
+| B.1 Eino 最小直接回答对照 | 直接切到 Eino 容易只会照抄框架代码 | 实现最小 `BaseChatModel`，用 `Chain → Compile → Runnable.Invoke` 执行一次请求 | `go run ./cmd/eino-direct` 输出固定 Assistant 回答 | 已掌握 |
+| B.2 Eino 工具闭环 | 直接回答仍看不出 Eino 如何承担 Agent 循环 | 用 Eino Tool/ToolsNode/Agent 复现 A.2 天气工具链路 | 终端再次看到 ToolCall → ToolResult → FinalAnswer | 未开始 |
+
+B.1 使用 `github.com/cloudwego/eino v0.9.19`；保留 `cmd/agenthub` 作为自研对照入口，新增 `cmd/eino-direct` 作为 Eino 对照入口。本节没有接真实模型、工具、HTTP、MCP 或额外应用抽象。
+
 ## 7. 每节课的计划记录模板
 
 ```markdown
@@ -220,9 +229,9 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase A 已完成，准备进入 Phase B：Eino 对照实验**
+- 当前阶段：**Phase B：Eino 对照实验进行中，B.1 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试**
+- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试、B.1 Eino 最小直接回答对照**
 - A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -237,14 +246,21 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 - A.4 稳定断言：四条消息按 User → Assistant ToolCall → Tool → Final Assistant 排列，Tool Name 与 Call ID 前后对应，工具结果进入最终回答，且 `Steps == 2`
 - A.4 边界结论：`runDemoAgent` 隔离可验证的业务组装，`run` 保留配置、日志与终端展示；入口测试不重复包内单测已经覆盖的 Agent Loop 内部异常分支
 - A.4 理解验收：能解释为何不直接测试混合配置和输出的 `run`、为何入口只保护跨组件闭环，以及 Call ID 与 Steps 分别证明调用关联和两轮模型执行
+- B.1 可见结果：`go run ./cmd/eino-direct` 通过单节点 Eino Chain 输出 `assistant: 你好，我是 AgentHub 的 Eino 演示 Agent。`
+- B.1 代码边界：`demo_model.go` 实现 `BaseChatModel` 的 Generate/Stream；`main.go` 负责创建 Chain、追加模型、Compile 并 Invoke，不修改自研入口
+- B.1 类型流：`NewChain[[]*schema.Message, *schema.Message]` 声明整条流程接收消息列表并返回一条消息；Compile 把可修改的流程定义转换为 `Runnable`
+- B.1 概念映射：自研 `llm.Message` 对应 `schema.Message`，自研 `llm.Model` 对应 `BaseChatModel`，自研同步运行入口对应 Chain 编排后的 `Runnable.Invoke`
+- B.1 理解验收：能说明 Chain 定义数据流、Runnable 才可执行；接口方法集要求教学 Model 同时实现 Generate/Stream；使用 Chain 不是强制规范，而是为后续连接 Prompt、Tool、Retriever 提前掌握可扩展编排方式
+- B.1 对照图：[`docs/images/b1-eino-direct-answer-flow.svg`](docs/images/b1-eino-direct-answer-flow.svg)
+- B.1 已知环境提示：Sonic 在当前环境回退到 `encoding/json`，不影响本节行为，仅可能影响 JSON 性能
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**B.1 Eino 最小直接回答对照**
-- 下一节只做：引入 Eino 的最小依赖，用 Eino 跑通与 A.1 等价的一轮直接回答，并把自研 Model、Message、Agent.Run 概念映射到 Eino
-- 下一节明确不做：删除自研 Runtime、真实模型、工具调用、HTTP、流式、MCP、数据库或额外架构抽象
+- 下一节：**B.2 Eino 工具闭环**
+- 下一节只做：使用 Eino 的 Tool/ToolsNode/Agent 复现 A.2 固定天气工具调用，并对照 Registry、Executor、Agent Loop 的职责
+- 下一节明确不做：真实模型、HTTP、流式用户体验、MCP、数据库、RAG 或额外应用抽象
 
 ## 9. 下一节理解验收题
 
-B.1 只进行一轮集中验收。学习者回答后直接统一修正并给出结论，不围绕同一知识点追加多轮口试。开始前应先明确 Eino 最小直接回答用例与 A.1 的一一对应关系；具体题目在完成 B.1 可见结果后给出。
+B.2 仍只进行一轮集中验收。开始前先运行并对照 A.2 的四条消息，随后只解决一个问题：Eino 如何完成 `Model → Tool → Model` 闭环。理解验收集中检查 Tool 定义、执行节点、循环控制与自研 Registry/Executor/Agent Loop 的映射。
 
 ## 10. 历史路线处理
 
