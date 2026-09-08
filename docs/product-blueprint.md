@@ -160,9 +160,9 @@ CLI / Web Console / External Client
        Application Use Cases
   Agent / Chat / Session / Knowledge / Run
                  │
-       Agent Runtime Port（项目边界）
+    最小应用边界（从真实用例中提取）
                  │
-         Eino Runtime Adapter
+              Eino
      Agent / Tool / Stream / Graph / RAG
                  │
  ┌───────────────┼────────────────┐
@@ -170,9 +170,9 @@ CLI / Web Console / External Client
                               PostgreSQL / Vector / Trace
 ```
 
-这里最重要的边界是 `Agent Runtime Port`：AgentHub 的业务用例依赖自己的稳定用例接口，Eino 位于适配层。这样可以使用 Eino，而不是把所有 API、数据库和业务对象都写成 Eino 类型。
+这里最重要的不是立即创建一个名为 `Agent Runtime Port` 的接口，而是保持职责方向：AgentHub 的业务用例负责产品语义，Eino 负责通用 Agent 执行，不让 API、数据库和业务对象无边界地扩散成框架类型。
 
-注意：这个边界只在 Phase B 的对照实验后落地；现在不提前新增接口。
+B.4 只记录这项边界决策，不新增接口。等 Phase C 的 CLI 用例或 Phase E 的 HTTP 用例产生真实重复、耦合或明确变化来源后，再从具体代码中提取最小应用接口；若直接调用 Eino 已足够清晰，则不为形式额外包装。
 
 ## 6. 版本里程碑
 

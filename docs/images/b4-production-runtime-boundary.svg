@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub 生产 Runtime 决策边界</title>
+  <desc id="desc">AgentHub 产品与应用层调用 Eino 通用 Agent Runtime，自研 Runtime 只保留为学习对照。是否抽取项目 Runtime 接口需等待真实重复和变化来源出现。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#47647b"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="720" fill="#f7f6f1"/>
+  <text x="600" y="54" text-anchor="middle" font-family="PingFang SC, Arial, sans-serif" font-size="28" font-weight="700" fill="#1a1b1c">B.4 生产 Runtime 决策边界</text>
+  <text x="600" y="86" text-anchor="middle" font-family="PingFang SC, Arial, sans-serif" font-size="16" fill="#5d6872">一套生产执行机制，两类清晰职责；接口从真实问题中提取</text>
+
+  <rect x="80" y="130" width="1040" height="160" rx="20" fill="#eaf7f0" stroke="#6fa88a" stroke-width="2"/>
+  <text x="110" y="170" font-family="PingFang SC, Arial, sans-serif" font-size="22" font-weight="700" fill="#244b38">AgentHub：产品与应用职责</text>
+  <text x="110" y="208" font-family="PingFang SC, Arial, sans-serif" font-size="16" fill="#2f4d3d">配置与模型选择　·　CLI / HTTP / SSE / Web 入口　·　Agent 与会话用例　·　持久化与恢复</text>
+  <text x="110" y="240" font-family="PingFang SC, Arial, sans-serif" font-size="16" fill="#2f4d3d">工具目录与 MCP 配置　·　权限、安全和错误映射　·　产品级日志、指标、成本与评测</text>
+  <text x="110" y="272" font-family="PingFang SC, Arial, sans-serif" font-size="15" font-weight="600" fill="#376b50">负责“产品要做什么”，通过 Eino 执行 Agent，但不重新实现 Eino</text>
+
+  <line x1="600" y1="302" x2="600" y2="356" stroke="#47647b" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="620" y="334" font-family="PingFang SC, Arial, sans-serif" font-size="14" fill="#47647b">调用</text>
+
+  <rect x="80" y="370" width="1040" height="160" rx="20" fill="#eaf3fc" stroke="#6f9fc6" stroke-width="2"/>
+  <text x="110" y="410" font-family="PingFang SC, Arial, sans-serif" font-size="22" font-weight="700" fill="#284b68">Eino：通用 Agent Runtime</text>
+  <text x="110" y="448" font-family="PingFang SC, Arial, sans-serif" font-size="16" fill="#334f66">Message / ChatModel　·　工具信息绑定与 ToolsNode 执行　·　ReAct Model → Tool → Model 循环</text>
+  <text x="110" y="480" font-family="PingFang SC, Arial, sans-serif" font-size="16" fill="#334f66">历史推进与结束判断　·　Generate / Stream　·　Callback 生命周期　·　Chain / Graph / Compose</text>
+  <text x="110" y="512" font-family="PingFang SC, Arial, sans-serif" font-size="15" font-weight="600" fill="#35678e">负责“Agent 如何执行”，不决定 AgentHub 的用户、会话、权限和产品接口</text>
+
+  <rect x="80" y="580" width="500" height="94" rx="16" fill="#fff2df" stroke="#d79b45" stroke-width="2"/>
+  <text x="106" y="614" font-family="PingFang SC, Arial, sans-serif" font-size="18" font-weight="700" fill="#774c12">自研 Runtime</text>
+  <text x="106" y="644" font-family="PingFang SC, Arial, sans-serif" font-size="15" fill="#6b4b22">冻结为学习对照；不再承载生产功能或新增特性</text>
+
+  <rect x="620" y="580" width="500" height="94" rx="16" fill="#f0f1f2" stroke="#9aa2a9" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="646" y="614" font-family="PingFang SC, Arial, sans-serif" font-size="18" font-weight="700" fill="#41484e">项目 Runtime 接口</text>
+  <text x="646" y="642" font-family="PingFang SC, Arial, sans-serif" font-size="15" fill="#505a62">暂不创建；等真实调用方、重复或变化来源出现后再提取</text>
+  <text x="646" y="662" font-family="PingFang SC, Arial, sans-serif" font-size="13" fill="#6b7379">判断依据是当前问题，不是框架是否已经提供同名接口</text>
+</svg>
