@@ -24,7 +24,15 @@ func main() {
 }
 
 func run() error {
+	if err := loadLocalEnv(".env"); err != nil {
+		return err
+	}
 	ctx := context.Background()
+
+	chatModel, err := newOpenAIChatModelFromEnv(ctx)
+	if err != nil {
+		return err
+	}
 
 	weatherTool, err := newWeatherTool()
 	if err != nil {
@@ -34,7 +42,7 @@ func run() error {
 	reactAgent, err := react.NewAgent(
 		ctx,
 		&react.AgentConfig{
-			ToolCallingModel: &demoChatModel{},
+			ToolCallingModel: chatModel,
 			ToolsConfig: compose.ToolsNodeConfig{
 				Tools: []tool.BaseTool{
 					weatherTool,

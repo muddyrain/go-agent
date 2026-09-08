@@ -145,11 +145,11 @@ usage: input=0 output=0 total=0
 | 能力 | 实现状态 | 串联/可见状态 | 后续处理 |
 |---|---|---|---|
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
-| Message / Model 协议 | 已实现 | 自研与 Eino 的直接回答、工具闭环均已进入独立入口，可对照消息与模型接口 | Phase C 接真实模型 |
+| Message / Model 协议 | 已实现 | 正式入口已使用 OpenAI 兼容真实模型完成工具调用与流式回答；教学实现保留在 `examples/` | Phase C 继续加入交互式多轮输入 |
 | Tool / Registry / Executor | 已实现 | 自研天气工具与 Eino Tool/ToolsNode 均已进入入口，职责映射已完成 | Phase D 接真实 MCP |
 | Agent Loop | 已实现 | 自研 Loop 与 Eino ReAct Agent 都已完成闭环；正式入口已收敛到 Eino，自研实现归档为学习对照 | Phase C 接真实模型并继续演进正式入口 |
 | Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
-| Streaming | 已实现 | 自研流协议已存在；Eino 最终回答已在独立入口中通过无缓冲 Pipe 分时产生并由终端逐块消费 | Phase C 接真实模型流，Phase E 映射为 SSE 事件 |
+| Streaming | 已实现 | 正式入口已消费 OpenAI 兼容服务的真实增量流；教学 Pipe 对照保留在历史示例中 | Phase E 映射为 SSE 事件 |
 | Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
 | MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
@@ -165,8 +165,8 @@ usage: input=0 output=0 total=0
 | 阶段 | 要解决的核心问题 | 用户可见成果 | Runtime 策略 | 状态 |
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
-| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 进行中：B.4 已掌握 |
-| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 待开始 |
+| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
+| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
@@ -234,9 +234,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase B 已完成，准备进入 Phase C：可用 CLI Agent**
+- 当前阶段：**Phase C：可用 CLI Agent，C.1 真实模型接入已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试、B.1 Eino 最小直接回答对照、B.2 Eino 工具闭环、B.3 流式和回调观察、B.4 架构决策与生产切换、B.5 清理双轨风险**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1 真实模型接入**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -279,14 +279,19 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - B.5 入口收敛：`cmd/agenthub` 现在是唯一正式入口并运行 Eino 流式 ReAct 闭环；Phase A 自研入口与 B.1/B.2 阶段性实现归档到 `examples/`
 - B.5 保留边界：自研 `internal/agent`、`llm`、`tool` 等包只因可运行学习对照和早期实验仍依赖而保留，不是未来生产底层，也不再增加生产特性
 - B.5 理解验收：能判断真实模型应从 `cmd/agenthub` 接入；已统一校正自研 Runtime 包的保留原因与生产身份
+- C.1 真实模型：`cmd/agenthub/openai_model.go` 从环境变量创建 Eino OpenAI 兼容 ChatModel，并以 30 秒请求超时保护外部调用
+- C.1 配置边界：`cmd/agenthub/env.go` 在应用启动时可选加载 `.env`；系统环境变量优先，`.env` 不存在不阻塞生产启动，真实密钥保持在 Git 之外
+- C.1 可见结果：真实模型第一轮生成 `get_weather` ToolCall，工具返回结果后第二轮模型流式生成最终天气回答；一次实测最终回答收到 14 个增量 Chunk
+- C.1 最小测试：只保护环境变量优先、缺少 `.env` 可启动、缺少 API Key 联网前失败，不用网络测试重复验证 Provider
+- C.1 理解验收：能说明 `.env` 属于应用启动配置、系统环境用于部署覆盖，以及流式 Chunk 是服务端增量片段而非固定的一 Token 一 Chunk
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**C.1 真实模型接入**
-- 下一节只做：在正式 `cmd/agenthub` 入口接入一个支持工具调用的真实模型 Provider，并从环境变量安全读取所需配置
-- 下一节明确不做：交互式多轮 CLI、HTTP/SSE、MCP、数据库、RAG 或预先创建 Runtime 接口
+- 下一节：**C.2 交互式 CLI**
+- 下一节只做：把固定天气问题改为终端循环输入，支持连续提问和显式退出，并明确终端 I/O、会话历史与 Agent 执行的边界
+- 下一节明确不做：HTTP/SSE、MCP、数据库、RAG 或新的 Runtime 抽象
 
 ## 9. 下一节理解验收题
 
-C.1 仍只进行一轮集中验收，聚焦两个结论：真实模型对象如何满足 Eino 的模型接口并进入现有 ReAct 组装；为什么密钥和环境差异属于应用配置，而不是 Agent Runtime 职责。
+C.2 仍只进行一轮集中验收，聚焦两个结论：为什么终端输入输出不应写入 Eino Runtime；怎样在多轮输入之间保留同一会话历史而不把不同会话混在一起。
 
 ## 10. 历史路线处理
 
