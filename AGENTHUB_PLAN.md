@@ -147,9 +147,9 @@ usage: input=0 output=0 total=0
 | 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
 | Message / Model 协议 | 已实现 | 自研与 Eino 的直接回答、工具闭环均已进入独立入口，可对照消息与模型接口 | B.3 观察 Eino 流式与回调，Phase C 接真实模型 |
 | Tool / Registry / Executor | 已实现 | 自研天气工具与 Eino Tool/ToolsNode 均已进入入口，职责映射已完成 | Phase D 接真实 MCP |
-| Agent Loop | 已实现 | 自研 Loop 与 Eino ReAct Agent 都已完成 Model—Tool—Model 闭环，并由纵向测试保护 | B.3 观察 Eino 流式和节点回调 |
+| Agent Loop | 已实现 | 自研 Loop 与 Eino ReAct Agent 都已完成 Model—Tool—Model 闭环，并由纵向测试或独立入口验证；Eino 节点生命周期已可通过 Callback 观察 | B.4 固化生产 Runtime 决策 |
 | Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
-| Streaming | 已实现 | 未连接终端或网络输出 | 先接终端，再接 SSE |
+| Streaming | 已实现 | 自研流协议已存在；Eino 最终回答已在独立入口中通过无缓冲 Pipe 分时产生并由终端逐块消费 | Phase C 接真实模型流，Phase E 映射为 SSE 事件 |
 | Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
 | MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
@@ -165,7 +165,7 @@ usage: input=0 output=0 total=0
 | 阶段 | 要解决的核心问题 | 用户可见成果 | Runtime 策略 | 状态 |
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
-| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 进行中：B.2 已掌握 |
+| Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 进行中：B.3 已掌握 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 待开始 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
@@ -203,9 +203,9 @@ Phase A 明确不接真实模型、不接 Eino、不做 HTTP、不继续 MCP 生
 |---|---|---|---|---|
 | B.1 Eino 最小直接回答对照 | 直接切到 Eino 容易只会照抄框架代码 | 实现最小 `BaseChatModel`，用 `Chain → Compile → Runnable.Invoke` 执行一次请求 | `go run ./cmd/eino-direct` 输出固定 Assistant 回答 | 已掌握 |
 | B.2 Eino 工具闭环 | 直接回答仍看不出 Eino 如何承担 Agent 循环 | 用 Eino Tool/ToolsNode/Agent 复现 A.2 天气工具链路 | 终端再次看到 ToolCall → ToolResult → FinalAnswer | 已掌握 |
-| B.3 流式和回调观察 | 同步结果看不到生成过程和节点边界 | 用最小例子观察 Eino 流式输出与模型、工具节点回调 | 终端可区分增量输出和节点开始/结束 | 未开始 |
+| B.3 流式和回调观察 | 同步结果看不到生成过程和节点边界 | 用最小例子观察 Eino 流式输出与模型、工具节点回调 | 终端可区分增量输出和节点开始/结束 | 已掌握 |
 
-B.1—B.2 使用 `github.com/cloudwego/eino v0.9.19`；保留 `cmd/agenthub` 作为自研对照入口，分别新增 `cmd/eino-direct` 与 `cmd/eino-tool`。B.2 使用固定教学 Model 和天气 Tool，只验证 Eino ReAct 工具闭环，没有接真实模型、HTTP、MCP 或额外应用抽象。
+B.1—B.3 使用 `github.com/cloudwego/eino v0.9.19`；保留 `cmd/agenthub` 作为自研对照入口，分别新增 `cmd/eino-direct`、`cmd/eino-tool` 与 `cmd/eino-stream`。B.3 仍使用固定教学 Model 和天气 Tool，只观察真实的分时 Chunk 消费与 Callback 生命周期，没有接真实模型、HTTP、MCP 或额外应用抽象。
 
 ## 7. 每节课的计划记录模板
 
@@ -230,9 +230,9 @@ B.1—B.2 使用 `github.com/cloudwego/eino v0.9.19`；保留 `cmd/agenthub` 作
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase B：Eino 对照实验进行中，B.2 已掌握**
+- 当前阶段：**Phase B：Eino 对照实验进行中，B.3 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试、B.1 Eino 最小直接回答对照、B.2 Eino 工具闭环**
+- 已掌握：**A.1 最小终端 Agent：直接回答、A.2 本地工具闭环、A.3 调用链复盘、A.4 最小入口测试、B.1 Eino 最小直接回答对照、B.2 Eino 工具闭环、B.3 流式和回调观察**
 - A.1 可见结果：`go run ./cmd/agenthub` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -261,14 +261,20 @@ B.1—B.2 使用 `github.com/cloudwego/eino v0.9.19`；保留 `cmd/agenthub` 作
 - B.2 理解验收：已经能说明主流程和主要职责映射；当前不要求背熟 Eino API，`WithMessageFuture` 只负责旁路观察，不参与闭环执行
 - B.2 最小测试：`cmd/eino-tool/main_test.go` 保护 ToolCall → ToolMessage → Final Assistant 的消息协议，并验证未绑定工具时 Model 明确拒绝
 - B.2 调用链：[`docs/images/b2-eino-tool-loop.svg`](docs/images/b2-eino-tool-loop.svg)
+- B.3 可见结果：`go run ./cmd/eino-stream` 先显示两轮 ChatModel 和一次 Tool 的 Callback 事件，再逐块打印最终回答；最终回答由两个分时 Chunk 拼接，中间可观察到约 1 秒等待
+- B.3 流式实现：最终回答使用无缓冲 `schema.Pipe`；生产 goroutine 通过 `Send` 分时发送，消费端循环 `Recv`，生产端和接收端分别关闭自己的流端，并传播 Context 取消
+- B.3 Callback 边界：`compose.WithCallbacks` 经 `agent.WithComposeOptions` 注入本次 ReAct 调用；Callback 只旁路观察 ChatModel 与 Tool 的开始、流就绪、结束和错误，不参与模型决策、工具执行、消息追加或路由
+- B.3 生命周期口径：流式 ChatModel 显示 `start → stream_ready`，同步 InvokableTool 显示 `start → end`；`stream_ready` 仅表示 StreamReader 已返回，不代表所有 Chunk 已经产生
+- B.3 理解验收：能说明第一轮模型在已绑定工具说明的前提下决定发起 ToolCall，工具结果进入历史后第二轮模型才产生最终回答；删除 Callback 不影响同一条 ReAct 闭环，只会失去观察日志
+- B.3 调用链：[`docs/images/b3-stream-callback-flow.svg`](docs/images/b3-stream-callback-flow.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**B.3 流式和回调观察**
-- 下一节只做：在独立最小入口中观察 Eino 的流式增量，以及模型和工具节点的开始、结束、错误回调
-- 下一节明确不做：真实模型、HTTP/SSE 服务、MCP、数据库、RAG、生产级可观测平台或额外封装
+- 下一节：**B.4 架构决策与生产切换**
+- 下一节只做：基于 A、B 两阶段的真实对照写一份简洁 ADR，明确为什么生产主线采用 Eino，以及 AgentHub 应用层需要保留的最小边界
+- 下一节明确不做：真实模型、交互式 CLI、HTTP/SSE、MCP、数据库、RAG，或提前新增尚未被具体问题证明的接口
 
 ## 9. 下一节理解验收题
 
-B.3 仍只进行一轮集中验收，只解决一个问题：同步 `Generate` 看不到的执行过程，Eino 的 Stream 和 Callback 分别怎样暴露。验收只要求能沿一次请求指出增量内容来自哪里、节点回调发生在何时，以及它们为什么不是两套 Agent Loop。
+B.4 仍只进行一轮集中验收，聚焦两个结论：Eino 已经替代哪些通用 Runtime 职责；AgentHub 为什么仍需保留面向产品用例的应用边界，而不是让业务代码到处直接依赖框架细节。
 
 ## 10. 历史路线处理
 

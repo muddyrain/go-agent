@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="940" viewBox="0 0 1440 940" role="img" aria-labelledby="title desc">
+  <title id="title">B.3 Eino 流式输出与 Callback 旁路观察</title>
+  <desc id="desc">展示一次 ReAct 天气请求中两次模型流、一次工具执行、最终 Chunk 消费，以及 Callback 与主执行链的关系。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#425466"/>
+    </marker>
+    <marker id="dashArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#9A6A18"/>
+    </marker>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; fill: #17212B; }
+      .title { font-size: 30px; font-weight: 700; }
+      .subtitle { font-size: 16px; fill: #596878; }
+      .lane-title { font-size: 17px; font-weight: 700; }
+      .node-title { font-size: 16px; font-weight: 700; }
+      .body { font-size: 14px; fill: #405063; }
+      .small { font-size: 13px; fill: #596878; }
+      .seq { font-size: 13px; font-weight: 700; fill: #FFFFFF; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1440" height="940" fill="#F7F8F5"/>
+  <text x="70" y="66" class="title">B.3：流式输出与 Callback 不是两套 Agent Loop</text>
+  <text x="70" y="98" class="subtitle">主链负责执行和传递数据；Callback 只在旁边观察同一次执行的生命周期事件</text>
+
+  <rect x="60" y="135" width="950" height="690" rx="18" fill="#FFFFFF" stroke="#D7DEE5" stroke-width="2"/>
+  <text x="90" y="175" class="lane-title">主执行链：ReAct 决策、工具执行与最终流消费</text>
+
+  <rect x="1040" y="135" width="340" height="690" rx="18" fill="#FFF9EA" stroke="#E7CC91" stroke-width="2"/>
+  <text x="1070" y="175" class="lane-title">Callback 观察通道</text>
+  <text x="1070" y="202" class="small">记录事件，不修改消息、不执行工具</text>
+
+  <circle cx="105" cy="245" r="20" fill="#3977C3"/><text x="105" y="250" class="seq" text-anchor="middle">1</text>
+  <rect x="145" y="210" width="300" height="70" rx="12" fill="#E9F2FC" stroke="#8EB5DC"/>
+  <text x="165" y="238" class="node-title">用户消息进入 ReAct</text>
+  <text x="165" y="262" class="body">“杭州今天天气怎么样？”</text>
+
+  <line x1="445" y1="245" x2="505" y2="245" stroke="#425466" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <circle cx="535" cy="245" r="20" fill="#3977C3"/><text x="535" y="250" class="seq" text-anchor="middle">2</text>
+  <rect x="575" y="200" width="350" height="90" rx="12" fill="#E9F2FC" stroke="#8EB5DC"/>
+  <text x="595" y="229" class="node-title">第一次 ChatModel.Stream</text>
+  <text x="595" y="253" class="body">工具说明已在构建阶段绑定</text>
+  <text x="595" y="275" class="body">模型决定调用 get_weather</text>
+
+  <path d="M750 290 L750 345 L535 345" fill="none" stroke="#425466" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <circle cx="505" cy="345" r="20" fill="#31865B"/><text x="505" y="350" class="seq" text-anchor="middle">3</text>
+  <rect x="145" y="310" width="320" height="70" rx="12" fill="#EAF7F0" stroke="#8AC7A5"/>
+  <text x="165" y="338" class="node-title">ToolsNode 执行工具</text>
+  <text x="165" y="362" class="body">参数校验 → Handler → ToolMessage</text>
+
+  <path d="M305 380 L305 440 L535 440" fill="none" stroke="#425466" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <circle cx="565" cy="440" r="20" fill="#3977C3"/><text x="565" y="445" class="seq" text-anchor="middle">4</text>
+  <rect x="605" y="395" width="320" height="90" rx="12" fill="#E9F2FC" stroke="#8EB5DC"/>
+  <text x="625" y="424" class="node-title">第二次 ChatModel.Stream</text>
+  <text x="625" y="448" class="body">输入历史已包含工具结果</text>
+  <text x="625" y="470" class="body">返回最终回答 StreamReader</text>
+
+  <path d="M765 485 L765 545 L535 545" fill="none" stroke="#425466" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <circle cx="505" cy="545" r="20" fill="#C47A1A"/><text x="505" y="550" class="seq" text-anchor="middle">5</text>
+  <rect x="145" y="505" width="320" height="80" rx="12" fill="#FFF2DF" stroke="#E5B46D"/>
+  <text x="165" y="534" class="node-title">生产端分时发送 Chunk</text>
+  <text x="165" y="558" class="body">Send(前缀) → 等待 1 秒 → Send(结果)</text>
+
+  <line x1="465" y1="545" x2="595" y2="545" stroke="#425466" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <circle cx="625" cy="545" r="20" fill="#C47A1A"/><text x="625" y="550" class="seq" text-anchor="middle">6</text>
+  <rect x="665" y="505" width="260" height="80" rx="12" fill="#FFF2DF" stroke="#E5B46D"/>
+  <text x="685" y="534" class="node-title">main 循环 Recv()</text>
+  <text x="685" y="558" class="body">逐块打印并拼接 full_answer</text>
+
+  <rect x="145" y="635" width="780" height="130" rx="14" fill="#F5F7F8" stroke="#CDD5DC"/>
+  <text x="170" y="667" class="node-title">流式生命周期的关键区别</text>
+  <text x="170" y="696" class="body">• ChatModel：start → stream_ready。stream_ready 只表示 StreamReader 已返回，不表示所有 Chunk 已到达。</text>
+  <text x="170" y="725" class="body">• Tool：start → end。当前天气工具是同步 InvokableTool，返回字符串后本次调用结束。</text>
+  <text x="170" y="754" class="body">• 删除 Callback 后，ReAct、工具调用和 Chunk 消费仍照常运行，只是不再打印观察日志。</text>
+
+  <rect x="1070" y="235" width="280" height="72" rx="12" fill="#FFFFFF" stroke="#E1BF72"/>
+  <text x="1090" y="264" class="node-title">ChatModel #1</text>
+  <text x="1090" y="289" class="body">start → stream_ready</text>
+
+  <rect x="1070" y="350" width="280" height="72" rx="12" fill="#FFFFFF" stroke="#E1BF72"/>
+  <text x="1090" y="379" class="node-title">get_weather</text>
+  <text x="1090" y="404" class="body">start → end</text>
+
+  <rect x="1070" y="465" width="280" height="72" rx="12" fill="#FFFFFF" stroke="#E1BF72"/>
+  <text x="1090" y="494" class="node-title">ChatModel #2</text>
+  <text x="1090" y="519" class="body">start → stream_ready</text>
+
+  <rect x="1070" y="590" width="280" height="115" rx="12" fill="#FFFDF6" stroke="#E1BF72"/>
+  <text x="1090" y="620" class="node-title">错误事件</text>
+  <text x="1090" y="646" class="body">组件返回非空 error 时：</text>
+  <text x="1090" y="672" class="body">callback: error</text>
+  <text x="1090" y="694" class="small">观察错误，不负责修复或吞掉错误</text>
+
+  <path d="M925 230 C990 230 1015 270 1070 270" fill="none" stroke="#9A6A18" stroke-width="2" stroke-dasharray="8 7" marker-end="url(#dashArrow)"/>
+  <path d="M465 345 C780 345 920 386 1070 386" fill="none" stroke="#9A6A18" stroke-width="2" stroke-dasharray="8 7" marker-end="url(#dashArrow)"/>
+  <path d="M925 440 C990 440 1015 501 1070 501" fill="none" stroke="#9A6A18" stroke-width="2" stroke-dasharray="8 7" marker-end="url(#dashArrow)"/>
+
+  <line x1="90" y1="868" x2="142" y2="868" stroke="#425466" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="155" y="873" class="small">主执行与数据流</text>
+  <line x1="330" y1="868" x2="382" y2="868" stroke="#9A6A18" stroke-width="2" stroke-dasharray="8 7" marker-end="url(#dashArrow)"/>
+  <text x="395" y="873" class="small">旁路观察事件</text>
+  <text x="1365" y="873" class="small" text-anchor="end">教学示意：基于 cmd/eino-stream 当前实现</text>
+</svg>
