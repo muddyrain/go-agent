@@ -38,14 +38,16 @@ usage: input=0 output=0 total=0
 - 从入口创建并运行一个 Agent；
 - 一条用户可观察的本地工具调用链；
 - 演示 Model 根据消息历史完成 `ToolCall → ToolMessage → FinalAnswer`；
-- Tool Definition、Registry、Executor、Memory、Factory 和 Agent Loop 的首次纵向串联。
+- Tool Definition、Registry、Executor、Memory、Factory 和 Agent Loop 的首次纵向串联；
+- 正式入口使用真实模型、真实工具调用与流式回答；
+- 同一终端会话内循环输入、显式退出和多轮消息历史。
 
 当前仍没有：
 
-- 可交互的多轮终端输入；
-- 真实模型和真实 Token Usage；
 - HTTP 服务、聊天接口或 SSE 输出；
-- 真实 MCP SDK/传输连接。
+- 真实 MCP SDK/传输连接；
+- 持久化的会话与多用户隔离；
+- RAG、Web Playground 或 Multi-Agent。
 
 因此，原计划中的“Phase 1 接近完成”只表示**内部组件实现进度**，不代表**可运行产品进度**；A.1—A.2 已开始把这些零件转化为可运行、可观察、可解释的纵向能力。
 
@@ -166,7 +168,7 @@ usage: input=0 output=0 total=0
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
-| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1 已掌握 |
+| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1—C.2 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
@@ -234,7 +236,7 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase C：可用 CLI Agent，C.1 真实模型接入已掌握**
+- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.2 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
 - 已掌握：**A.1—A.4、B.1—B.5、C.1 真实模型接入**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
@@ -284,14 +286,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - C.1 可见结果：真实模型第一轮生成 `get_weather` ToolCall，工具返回结果后第二轮模型流式生成最终天气回答；一次实测最终回答收到 14 个增量 Chunk
 - C.1 最小测试：只保护环境变量优先、缺少 `.env` 可启动、缺少 API Key 联网前失败，不用网络测试重复验证 Provider
 - C.1 理解验收：能说明 `.env` 属于应用启动配置、系统环境用于部署覆盖，以及流式 Chunk 是服务端增量片段而非固定的一 Token 一 Chunk
+- C.2 交互式 CLI：`cmd/agenthub/main.go` 循环读取终端输入，支持空输入跳过、`exit` / `quit` / EOF 退出，并在同一进程内维护会话历史
+- C.2 历史收集：每轮把 UserMessage 加入 `history`，用新的 `react.WithMessageFuture()` 收集本轮 Assistant ToolCall、ToolMessage 和最终 AssistantMessage，合并流式分片后追加到历史
+- C.2 失败边界：Agent 启动或流接收失败时打印错误并回滚本轮 UserMessage，避免一次模型超时终止整个 CLI 或留下无回答的孤立用户消息；模型请求超时由 30 秒调整为 60 秒
+- C.2 可见结果：同一终端先问“杭州天气”，再问“那上海呢？”，第二轮结合历史继续调用 `get_weather` 并回答上海天气；输入 `exit` 后正常退出
+- C.2 职责边界：终端 I/O 是 `cmd/agenthub` 的场景适配职责，Eino ReAct Agent 只负责基于消息执行模型—工具循环；当前历史由 CLI 应用层显式传入和追加，不是 Eino 自动持久化
+- C.2 理解验收：能说明终端 I/O 不应进入通用 Agent 执行层，并能用跨用户称呼串线的例子解释会话历史必须按用户/会话隔离
+- C.2 调用链：[`docs/images/c2-interactive-cli-flow.svg`](docs/images/c2-interactive-cli-flow.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**C.2 交互式 CLI**
-- 下一节只做：把固定天气问题改为终端循环输入，支持连续提问和显式退出，并明确终端 I/O、会话历史与 Agent 执行的边界
-- 下一节明确不做：HTTP/SSE、MCP、数据库、RAG 或新的 Runtime 抽象
+- 下一节：**C.3 真实本地工具**
+- 下一节只做：把当前教学天气工具升级为一个有实际价值、副作用可控的本地工具，由模型自主决定是否调用，并观察参数校验与失败反馈
+- 下一节明确不做：HTTP/SSE、MCP、数据库、RAG、Web 页面或新的 Runtime 抽象
 
 ## 9. 下一节理解验收题
 
-C.2 仍只进行一轮集中验收，聚焦两个结论：为什么终端输入输出不应写入 Eino Runtime；怎样在多轮输入之间保留同一会话历史而不把不同会话混在一起。
+C.3 仍只进行一轮集中验收，聚焦两个结论：为什么有实际副作用的本地工具需要明确参数与失败边界；为什么模型负责决定是否调用工具，而应用代码不应按关键词写死调用路径。
 
 ## 10. 历史路线处理
 

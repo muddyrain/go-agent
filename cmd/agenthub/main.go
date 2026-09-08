@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/cloudwego/eino/callbacks"
@@ -54,47 +56,108 @@ func run() error {
 		return fmt.Errorf("create ReAct agent: %w", err)
 	}
 
-	userMessage := schema.UserMessage("杭州今天天气怎么样？")
+	history := make([]*schema.Message, 0)
+	reader := bufio.NewReader(os.Stdin)
 
-	stream, err := reactAgent.Stream(
-		ctx,
-		[]*schema.Message{userMessage},
-		agent.WithComposeOptions(
-			compose.WithCallbacks(newLifecycleCallback()),
-		),
-	)
-
-	if err != nil {
-		return fmt.Errorf("stream ReAct response: %w", err)
-	}
-	defer stream.Close()
-
-	fmt.Printf("user: %s\n", userMessage.Content)
-	fmt.Print("assistant: ")
-	var answer strings.Builder
-	chunks := 0
-
+outer:
 	for {
-		chunk, err := stream.Recv()
+		fmt.Print("\n> ")
+
+		input, err := reader.ReadString('\n')
 		if errors.Is(err, io.EOF) {
-			break
+			fmt.Println("\nbye")
+			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("receive ReAct stream: %w", err)
+			return fmt.Errorf("read stdin: %w", err)
 		}
-		if chunk == nil {
-			return fmt.Errorf("ReAct produced a nil stream chunk")
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+		if strings.EqualFold(input, "exit") || strings.EqualFold(input, "quit") {
+			fmt.Println("bye")
+			return nil
+		}
+		userMessage := schema.UserMessage(input)
+		history = append(history, userMessage)
+
+		msgOpt, future := react.WithMessageFuture()
+
+		stream, err := reactAgent.Stream(
+			ctx,
+			history,
+			msgOpt,
+			agent.WithComposeOptions(
+				compose.WithCallbacks(newLifecycleCallback()),
+			),
+		)
+		if err != nil {
+			fmt.Printf("error: %v\n", err)
+			history = history[:len(history)-1]
+			continue
 		}
 
-		chunks++
-		answer.WriteString(chunk.Content)
-		fmt.Print(chunk.Content)
+		fmt.Printf("user: %s\n", input)
+		fmt.Print("assistant: ")
+		chunks := 0
+		for {
+			chunk, err := stream.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				stream.Close()
+				fmt.Printf("error: %v\n", err)
+				history = history[:len(history)-1]
+				continue outer
+			}
+			if chunk == nil {
+				stream.Close()
+				return fmt.Errorf("ReAct produced a nil stream chunk")
+			}
+			chunks++
+			fmt.Print(chunk.Content)
+		}
+		stream.Close()
+
+		fmt.Println()
+		fmt.Printf("chunks: %d\n", chunks)
+
+		iter := future.GetMessageStreams()
+		for {
+			msgStream, hasNext, err := iter.Next()
+			if err != nil {
+				return fmt.Errorf("collect agent messages: %w", err)
+			}
+			if !hasNext {
+				break
+			}
+
+			var roundMsgs []*schema.Message
+			for {
+				msg, err := msgStream.Recv()
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if err != nil {
+					return fmt.Errorf("read agent message stream: %w", err)
+				}
+				roundMsgs = append(roundMsgs, msg)
+			}
+			msgStream.Close()
+
+			if len(roundMsgs) == 0 {
+				continue
+			}
+			concated, err := schema.ConcatMessages(roundMsgs)
+			if err != nil {
+				return fmt.Errorf("concat agent message: %w", err)
+			}
+			history = append(history, concated)
+		}
 	}
 
-	fmt.Println()
-	fmt.Printf("chunks: %d\n", chunks)
-	fmt.Printf("full_answer: %s\n", answer.String())
-	return nil
 }
 
 func printMessage(message *schema.Message) {

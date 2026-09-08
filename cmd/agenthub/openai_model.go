@@ -36,7 +36,7 @@ func newOpenAIChatModelFromEnv(
 		APIKey:  apiKey,
 		BaseURL: baseURL,
 		Model:   modelName,
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create OpenAI-compatible chat model: %w", err)
