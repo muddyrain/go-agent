@@ -2,79 +2,152 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"time"
 
-	"agenthub/internal/apperr"
-	"agenthub/internal/llm"
-	"agenthub/internal/tool"
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 )
 
-type demoModel struct{}
+type demoChatModel struct {
+	tools []*schema.ToolInfo
+}
 
-var _ llm.Model = (*demoModel)(nil)
+var _ model.ToolCallingChatModel = (*demoChatModel)(nil)
 
-func (m *demoModel) Generate(
+func (m *demoChatModel) WithTools(
+	tools []*schema.ToolInfo,
+) (model.ToolCallingChatModel, error) {
+	boundModel := *m
+	boundModel.tools = append(
+		[]*schema.ToolInfo(nil),
+		tools...,
+	)
+
+	return &boundModel, nil
+}
+
+func (m *demoChatModel) Generate(
 	ctx context.Context,
-	req llm.Request,
-) (llm.Response, error) {
+	input []*schema.Message,
+	_ ...model.Option,
+) (*schema.Message, error) {
 	if err := ctx.Err(); err != nil {
-		return llm.Response{}, err
+		return nil, err
+	}
+	if len(input) == 0 {
+		return nil, fmt.Errorf("model input messages are required")
 	}
 
-	if len(req.Messages) == 0 {
-		return llm.Response{}, fmt.Errorf("model request messages are required")
-	}
-
-	lastMessage := req.Messages[len(req.Messages)-1]
+	lastMessage := input[len(input)-1]
 
 	switch lastMessage.Role {
-	case llm.RoleUser:
-		// 第一次模型调用。
-		// 先确认 req.Tools 中存在 get_weather。
-		// 然后返回 AssistantToolCalls。
-		if len(req.Tools) == 0 || req.Tools[0].Name != "get_weather" {
-			return llm.Response{}, fmt.Errorf(
-				"expected get_weather tool in request",
+	case schema.User:
+		if len(m.tools) == 0 {
+			return nil, fmt.Errorf("no tools bound to the model")
+		}
+		var hasWeatherTool bool
+		for _, tool := range m.tools {
+			if tool.Name == "get_weather" {
+				hasWeatherTool = true
+				break
+			}
+		}
+		if !hasWeatherTool {
+			return nil, fmt.Errorf("tool 'get_weather' is not bound to the model")
+		}
+		return schema.AssistantMessage(
+			"",
+			[]schema.ToolCall{
+				{
+					ID: "call-weather-001",
+					Function: schema.FunctionCall{
+						Name:      "get_weather",
+						Arguments: `{"city":"杭州"}`,
+					},
+				},
+			},
+		), nil
+
+	case schema.Tool:
+		if lastMessage.ToolName != "get_weather" {
+			return nil, fmt.Errorf(
+				"unexpected tool name: %s",
+				lastMessage.ToolName,
 			)
 		}
-		return llm.Response{
-			Message: llm.AssistantToolCalls(
-				tool.Call{
-					ID:        "call-weather-001",
-					Name:      "get_weather",
-					Arguments: json.RawMessage(`{"city":"杭州"}`),
-				},
-			),
-			FinishReason: "tool_calls",
-			Usage:        llm.Usage{},
-		}, nil
-
-	case llm.RoleTool:
-		if lastMessage.Name != "get_weather" ||
-			lastMessage.ToolCallID != "call-weather-001" {
-			return llm.Response{}, fmt.Errorf(
-				"unexpected tool message: name=%q call_id=%q",
-				lastMessage.Name,
+		if lastMessage.ToolCallID != "call-weather-001" {
+			return nil, fmt.Errorf(
+				"unexpected tool call ID: %s",
 				lastMessage.ToolCallID,
 			)
 		}
-		return llm.Response{
-			Message: llm.AssistantMessage(
-				fmt.Sprintf(
-					"根据天气工具的查询结果：%s",
-					lastMessage.Content,
-				),
+		return schema.AssistantMessage(
+			fmt.Sprintf(
+				"根据天气工具的查询结果：%s",
+				lastMessage.Content,
 			),
-			FinishReason: "stop",
-			Usage:        llm.Usage{},
-		}, nil
+			nil,
+		), nil
 
 	default:
-		// 返回 unexpected last message role 错误。
-		return llm.Response{}, apperr.New(
-			apperr.CodeInternal,
-			"unexpected last message role",
+		return nil, fmt.Errorf(
+			"unexpected last message role: %s",
+			lastMessage.Role,
 		)
 	}
+}
+
+func (m *demoChatModel) Stream(
+	ctx context.Context,
+	input []*schema.Message,
+	opts ...model.Option,
+) (*schema.StreamReader[*schema.Message], error) {
+	response, err := m.Generate(ctx, input, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// 第一轮模型返回的是 ToolCall。
+	// ReAct 需要从流的首块判断是否应该进入工具节点，
+	// 所以这里暂时保持为一个完整块。
+	if len(response.ToolCalls) > 0 {
+		return schema.StreamReaderFromArray(
+			[]*schema.Message{response},
+		), nil
+	}
+
+	reader, writer := schema.Pipe[*schema.Message](0)
+
+	go func() {
+		defer writer.Close()
+
+		firstChunk := schema.AssistantMessage(
+			"根据天气工具的查询结果：",
+			nil,
+		)
+
+		if closed := writer.Send(firstChunk, nil); closed {
+			return
+		}
+
+		timer := time.NewTimer(time.Second)
+		defer timer.Stop()
+
+		select {
+		case <-ctx.Done():
+			writer.Send(nil, ctx.Err())
+			return
+		case <-timer.C:
+		}
+
+		secondChunk := schema.AssistantMessage(
+			input[len(input)-1].Content,
+			nil,
+		)
+
+		writer.Send(secondChunk, nil)
+	}()
+
+	return reader, nil
 }

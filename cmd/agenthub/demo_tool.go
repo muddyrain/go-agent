@@ -2,47 +2,32 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
-	"agenthub/internal/tool"
+	"github.com/cloudwego/eino/components/tool"
+	toolutils "github.com/cloudwego/eino/components/tool/utils"
 )
 
 type weatherArguments struct {
-	City string `json:"city"`
+	City string `json:"city" jsonschema:"required,description=要查询天气的城市"`
 }
 
-func newWeatherTool() (*tool.Function, error) {
-	return tool.NewFunction(
-		tool.Definition{
-			Name:        "get_weather",
-			Description: "查询指定城市的演示天气",
-			Parameters: json.RawMessage(`{
-				"type": "object",
-				"properties": {
-					"city": {
-						"type": "string",
-						"description": "要查询天气的城市"
-					}
-				},
-				"required": ["city"],
-				"additionalProperties": false
-			}`),
-		},
+func newWeatherTool() (tool.InvokableTool, error) {
+	return toolutils.InferTool(
+		"get_weather",
+		"查询指定城市的演示天气",
 		func(
 			ctx context.Context,
-			arguments json.RawMessage,
+			input weatherArguments,
 		) (string, error) {
-			if ctx.Err() != nil {
-				return "", fmt.Errorf("context canceled: %w", ctx.Err())
+			if err := ctx.Err(); err != nil {
+				return "", fmt.Errorf("context canceled: %w", err)
 			}
-			var args weatherArguments
-			err := json.Unmarshal(arguments, &args)
 
-			if err != nil {
-				return "", fmt.Errorf("decode weather arguments: %w", err)
-			}
-			return fmt.Sprintf("%s今天晴，25°C。", args.City), nil
+			return fmt.Sprintf(
+				"%s今天晴，25°C。",
+				input.City,
+			), nil
 		},
 	)
 }

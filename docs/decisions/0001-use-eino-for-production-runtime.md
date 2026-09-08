@@ -76,4 +76,4 @@ AgentHub 负责面向最终产品和具体业务的应用职责：
 2. 不继续向自研 Runtime 添加生产特性。
 3. 同一个生产入口不得同时运行自研 Agent Loop 和 Eino ReAct Loop。
 4. 尚未出现真实重复或变化来源之前，不提前新增 Runtime 抽象。
-5. 自研 Runtime 的保留和清理范围在 B.5 单独决定。
+5. B.5 已将 `cmd/agenthub` 收敛为唯一正式入口，并把自研闭环与阶段性 Eino 实现归档到 `examples/`。自研 Runtime 的 `internal` 支持包因学习示例和早期实验仍依赖而暂时保留，但正式入口不得重新依赖它们。

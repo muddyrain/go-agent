@@ -2,162 +2,189 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
-	"os"
+	"io"
+	"log"
+	"strings"
 
-	"agenthub/internal/agent"
-	"agenthub/internal/agentfactory"
-	"agenthub/internal/apperr"
-	"agenthub/internal/config"
-	"agenthub/internal/llm"
-	"agenthub/internal/logger"
-	"agenthub/internal/tokenizer"
-	"agenthub/internal/tool"
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components"
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/flow/agent"
+	"github.com/cloudwego/eino/flow/agent/react"
+	"github.com/cloudwego/eino/schema"
 )
 
 func main() {
 	if err := run(); err != nil {
-		slog.Error(
-			"application failed",
-			"code", apperr.CodeOf(err),
-			"error", err,
-		)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 }
 
 func run() error {
-	cfg, err := config.Load("configs/config.yaml")
+	ctx := context.Background()
+
+	weatherTool, err := newWeatherTool()
 	if err != nil {
-		return err
+		return fmt.Errorf("create weather tool: %w", err)
 	}
 
-	log, err := logger.New(logger.Config{
-		Level:  cfg.Log.Level,
-		Format: cfg.Log.Format,
-	})
+	reactAgent, err := react.NewAgent(
+		ctx,
+		&react.AgentConfig{
+			ToolCallingModel: &demoChatModel{},
+			ToolsConfig: compose.ToolsNodeConfig{
+				Tools: []tool.BaseTool{
+					weatherTool,
+				},
+			},
+		},
+	)
 	if err != nil {
-		return apperr.Wrap(
-			apperr.CodeInternal,
-			"create logger",
-			err,
-		)
+		return fmt.Errorf("create ReAct agent: %w", err)
 	}
 
-	slog.SetDefault(log)
+	userMessage := schema.UserMessage("杭州今天天气怎么样？")
 
-	address := fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port)
-
-	log.Info(
-		"application starting",
-		"app", cfg.App.Name,
-		"env", cfg.App.Env,
-		"address", address,
+	stream, err := reactAgent.Stream(
+		ctx,
+		[]*schema.Message{userMessage},
+		agent.WithComposeOptions(
+			compose.WithCallbacks(newLifecycleCallback()),
+		),
 	)
 
-	result, err := runDemoAgent(context.Background(), cfg.Agent)
 	if err != nil {
-		return err
+		return fmt.Errorf("stream ReAct response: %w", err)
+	}
+	defer stream.Close()
+
+	fmt.Printf("user: %s\n", userMessage.Content)
+	fmt.Print("assistant: ")
+	var answer strings.Builder
+	chunks := 0
+
+	for {
+		chunk, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("receive ReAct stream: %w", err)
+		}
+		if chunk == nil {
+			return fmt.Errorf("ReAct produced a nil stream chunk")
+		}
+
+		chunks++
+		answer.WriteString(chunk.Content)
+		fmt.Print(chunk.Content)
 	}
 
-	for _, message := range result.Messages {
-		// tool_call: id=call-weather-001 name=get_weather arguments={"city":"杭州"}
-		if message.Role == llm.RoleAssistant {
-			for _, call := range message.ToolCalls {
-				// 输出 ToolCall
-				fmt.Printf(
-					"tool_call: id=%s name=%s arguments=%s\n",
-					call.ID,
-					call.Name,
-					string(call.Arguments),
-				)
-			}
-		}
-		// tool_result: id=call-weather-001 name=get_weather content=杭州今天晴，25°C。
-		if message.Role == llm.RoleTool {
-			fmt.Printf(
-				"tool_result: id=%s name=%s content=%s\n",
-				message.ToolCallID,
-				message.Name,
-				message.Content,
-			)
-		}
-	}
-
-	fmt.Printf(
-		"assistant: %s\nsteps: %d\nusage: input=%d output=%d total=%d\n",
-		result.FinalMessage.Content,
-		result.Steps,
-		result.Usage.InputTokens,
-		result.Usage.OutputTokens,
-		result.Usage.TotalTokens,
-	)
-
+	fmt.Println()
+	fmt.Printf("chunks: %d\n", chunks)
+	fmt.Printf("full_answer: %s\n", answer.String())
 	return nil
 }
 
-func runDemoAgent(
-	ctx context.Context,
-	cfg config.AgentConfig,
-) (agent.RunResult, error) {
-	// 从现有 run() 搬入：
-	// 1. 创建 demoModel
-	model := &demoModel{}
-	// 2. 创建 Registry
-	registry := tool.NewRegistry()
+func printMessage(message *schema.Message) {
+	switch message.Role {
+	case schema.Assistant:
+		if len(message.ToolCalls) > 0 {
+			for _, toolCall := range message.ToolCalls {
+				fmt.Printf(
+					"tool_call: id=%s name=%s arguments=%s\n",
+					toolCall.ID,
+					toolCall.Function.Name,
+					toolCall.Function.Arguments,
+				)
+			}
+			return
+		}
 
-	// 3. 创建并注册天气工具
-	weatherTool, err := newWeatherTool()
-	if err != nil {
-		return agent.RunResult{}, apperr.Wrap(
-			apperr.CodeInternal,
-			"create demo weather tool",
-			err,
+		fmt.Printf("assistant: %s\n", message.Content)
+
+	case schema.Tool:
+		fmt.Printf(
+			"tool_result: id=%s name=%s content=%s\n",
+			message.ToolCallID,
+			message.ToolName,
+			message.Content,
 		)
 	}
-	if err := registry.Register(weatherTool); err != nil {
-		return agent.RunResult{}, apperr.Wrap(
-			apperr.CodeInternal,
-			"register demo weather tool",
-			err,
-		)
-	}
-	// 4. 创建 FakeTokenizer
-	fakeTokenizer := &tokenizer.FakeTokenizer{
-		PerMessage: 1,
+}
+
+func newLifecycleCallback() callbacks.Handler {
+	return callbacks.NewHandlerBuilder().
+		OnStartFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackInput,
+		) context.Context {
+			if shouldObserve(info) {
+				fmt.Printf(
+					"callback: start component=%s name=%s\n",
+					info.Component,
+					info.Name,
+				)
+			}
+			return ctx
+		}).
+		OnEndFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackOutput,
+		) context.Context {
+			if shouldObserve(info) {
+				fmt.Printf(
+					"callback: end component=%s name=%s\n",
+					info.Component,
+					info.Name,
+				)
+			}
+			return ctx
+		}).
+		OnEndWithStreamOutputFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			output *schema.StreamReader[callbacks.CallbackOutput],
+		) context.Context {
+			defer output.Close()
+
+			if shouldObserve(info) {
+				fmt.Printf(
+					"callback: stream_ready component=%s name=%s\n",
+					info.Component,
+					info.Name,
+				)
+			}
+			return ctx
+		}).
+		OnErrorFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			err error,
+		) context.Context {
+			if shouldObserve(info) {
+				fmt.Printf(
+					"callback: error component=%s name=%s error=%v\n",
+					info.Component,
+					info.Name,
+					err,
+				)
+			}
+			return ctx
+		}).
+		Build()
+}
+
+func shouldObserve(info *callbacks.RunInfo) bool {
+	if info == nil {
+		return false
 	}
 
-	// 5. agentfactory.Build
-	runtimeAgent, err := agentfactory.Build(
-		agentfactory.ConfigFromApp(cfg),
-		agentfactory.Dependencies{
-			Model:     model,
-			Registry:  registry,
-			Tokenizer: fakeTokenizer,
-		},
-	)
-	if err != nil {
-		return agent.RunResult{}, apperr.Wrap(
-			apperr.CodeInternal,
-			"build demo agent",
-			err,
-		)
-	}
-	// 6. runtimeAgent.Run
-	result, err := runtimeAgent.Run(
-		ctx,
-		[]llm.Message{
-			llm.UserMessage("杭州今天天气怎么样？"),
-		},
-	)
-	if err != nil {
-		return agent.RunResult{}, apperr.Wrap(
-			apperr.CodeInternal,
-			"run demo agent",
-			err,
-		)
-	}
-
-	return result, nil
+	return info.Component == components.ComponentOfChatModel ||
+		info.Component == components.ComponentOfTool
 }

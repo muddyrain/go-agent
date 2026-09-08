@@ -52,8 +52,9 @@ go run ./cmd/agenthub
 
 ## 项目约定
 
-- 应用入口：`cmd/agenthub/`
-- 私有业务代码：`internal/`
+- 正式应用入口：`cmd/agenthub/`，后续生产功能统一使用 Eino。
+- 教学对照入口：`examples/`，不得继续承载新的生产功能。
+- 私有业务代码：`internal/`；其中现有自研 Runtime 包仅为历史教学对照和早期实验保留，新生产代码不得继续依赖。
 - 配置文件：`configs/`
 - 项目脚本：`scripts/`
 - 项目文档：`docs/`

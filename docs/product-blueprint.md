@@ -245,7 +245,7 @@ B.4 只记录这项边界决策，不新增接口。等 Phase C 的 CLI 用例�
 
 ### 完成标准
 
-- `go run ./cmd/agenthub` 会真实运行一次 Agent。
+- `go run ./examples/selfbuilt-runtime` 会真实运行一次自研 Agent 教学闭环。
 - 学习者能不看代码讲清两轮模型调用中消息如何变化。
 - 学习者能解释 Registry 与 Executor 的区别。
 - 不接真实模型、不接 Eino、不做 HTTP。
