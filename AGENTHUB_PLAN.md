@@ -169,7 +169,7 @@ usage: input=0 output=0 total=0
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
-| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
+| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 进行中：D.1 已掌握 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.5 已掌握，阶段已完成**
+- 当前阶段：**Phase D：工具中心与 MCP，D.1 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -321,14 +321,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - Phase C 收口验证：正式入口依赖中只出现 `agenthub/internal/session`；`go run ./examples/selfbuilt-runtime` 仍完成自研 ToolCall 闭环；全项目测试、静态检查和构建通过
 - Phase C 收口理解验收：理解 `examples` 名称只表达意图，嵌套 `internal` 才提供可靠导入边界；旧 MCP 原型因绑定自研 Tool/Registry 且缺少真实传输，不作为 Phase D 生产基础
 - Phase C 收口图：[`docs/images/c-phase-boundary-cleanup.svg`](docs/images/c-phase-boundary-cleanup.svg)
+- D.1 工具目录：新增 `internal/toolcatalog.Catalog`，保存 Eino 工具实例、来源和启用状态；`List` 从 `Tool.Info` 读取名称、描述与参数 Schema，避免维护第二份模型可见元数据
+- D.1 执行边界：`Catalog.EnabledTools()` 只筛选交给 ReAct Agent 的工具，ToolCall 执行仍由 Eino ToolsNode 完成；Catalog 不解析参数、不执行 Handler、不推进 Agent Loop
+- D.1 CLI：新增 `/tools` 本地控制命令，在创建 UserMessage 前截获并展示全部目录条目，因此禁用工具可被诊断但不会进入模型工具集合，也不会污染会话历史
+- D.1 可见结果：`/tools` 展示 1 个启用的本地 `read_project_file` 及真实参数 Schema且无模型 Callback；随后读取 `README.md` 仍正常触发 ToolCall 并生成回答
+- D.1 最小测试：保护启用工具筛选、禁用工具仍可见、来源与 Schema 提取，以及 CLI 的来源和状态输出
+- D.1 理解验收：能说明 Catalog 的注册仅是条目保存和查询，不是执行 Registry；`List` 展示全部有效条目，非法元数据返回错误，`EnabledTools` 才执行启用过滤
+- D.1 调用链：[`docs/images/d1-tool-catalog-flow.svg`](docs/images/d1-tool-catalog-flow.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**D.1 工具目录**
-- 下一节只做：在生产主线统一描述和展示 Agent 可用工具的名称、来源、启用状态、描述和参数 Schema，为本地工具与后续真实 MCP 工具建立同一目录视图
-- 下一节明确不做：真实 MCP 连接、远程调用、HTTP/SSE、持久化、RAG、Web 页面或重建自研 Registry
+- 下一节：**D.2 单 MCP Server 真实连接**
+- 下一节只做：选择最小可运行传输，建立一个真实 MCP Session，发现工具后转换为 Eino Tool 并通过现有 Catalog 与 CLI 调用
+- 下一节明确不做：多个 MCP Server、名称冲突、自动重连、HTTP/SSE、持久化、RAG 或 Web 页面
 
 ## 9. 下一节理解验收题
 
-D.1 仍只进行一轮集中验收，聚焦两个结论：工具目录与工具执行器分别解决什么问题；为什么目录可以统一描述本地与 MCP 工具，却不应重新实现 Eino 的 Tool 调用循环。
+D.2 仍只进行一轮集中验收，聚焦两个结论：MCP Session、工具发现和 Eino Tool Adapter 各自处于哪一层；为什么远程业务失败与连接或 Context 失败需要不同传播方式。
 
 ## 10. 历史路线处理
 

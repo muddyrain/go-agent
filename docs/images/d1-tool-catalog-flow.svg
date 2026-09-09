@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700" role="img" aria-labelledby="title desc">
+  <title id="title">D.1 工具目录调用链</title>
+  <desc id="desc">展示工具目录登记工具元数据后，CLI 列表路径和 Eino 执行路径的职责分离。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#547b8b"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17252c; }
+      .sub { font: 400 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #5b6d76; }
+      .lane { font: 700 19px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #22363f; }
+      .label { font: 600 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #243b45; }
+      .body { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #465b64; }
+      .small { font: 400 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #64767e; }
+      .mono { font: 600 14px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #315462; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="700" fill="#f6f5f0"/>
+  <text x="54" y="56" class="title">D.1 工具目录：描述与执行分离</text>
+  <text x="54" y="86" class="sub">同一份 Eino ToolInfo 服务于产品展示和模型调用；Catalog 不成为第二套 Runtime Registry</text>
+
+  <rect x="50" y="120" width="1100" height="145" rx="18" fill="#ffffff" stroke="#abcbd8" stroke-width="2"/>
+  <text x="78" y="156" class="lane">组装阶段</text>
+
+  <rect x="78" y="178" width="240" height="58" rx="11" fill="#eef7fa" stroke="#a9cad7"/>
+  <text x="98" y="203" class="mono">read_project_file</text>
+  <text x="98" y="224" class="small">Eino BaseTool</text>
+
+  <line x1="318" y1="207" x2="380" y2="207" stroke="#547b8b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="392" y="166" width="380" height="82" rx="12" fill="#eaf5f8" stroke="#83b8cb" stroke-width="2"/>
+  <text x="414" y="193" class="mono">toolcatalog.Catalog</text>
+  <text x="414" y="216" class="body">保存 Tool + Source + Enabled</text>
+  <text x="414" y="237" class="small">Info() 是名称、描述、参数 Schema 的事实来源</text>
+
+  <line x1="772" y1="207" x2="834" y2="207" stroke="#547b8b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="846" y="178" width="270" height="58" rx="11" fill="#eef8f1" stroke="#a8cbb1"/>
+  <text x="866" y="203" class="mono">EnabledTools()</text>
+  <text x="866" y="224" class="small">只返回启用工具给 ReAct</text>
+
+  <rect x="50" y="302" width="525" height="276" rx="18" fill="#ffffff" stroke="#9cc6d6" stroke-width="2"/>
+  <text x="78" y="340" class="lane">管理路径：CLI 控制命令</text>
+  <rect x="82" y="370" width="150" height="54" rx="11" fill="#eef7fa" stroke="#a9cad7"/>
+  <text x="157" y="402" text-anchor="middle" class="mono">/tools</text>
+  <line x1="232" y1="397" x2="286" y2="397" stroke="#547b8b" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="298" y="370" width="220" height="54" rx="11" fill="#eef7fa" stroke="#a9cad7"/>
+  <text x="408" y="392" text-anchor="middle" class="mono">Catalog.List()</text>
+  <text x="408" y="413" text-anchor="middle" class="small">包含 enabled / disabled</text>
+  <line x1="408" y1="424" x2="408" y2="462" stroke="#547b8b" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="186" y="474" width="332" height="70" rx="11" fill="#f3f8fa" stroke="#b8ced7"/>
+  <text x="208" y="500" class="label">终端展示工具目录</text>
+  <text x="208" y="523" class="small">不调用模型 · 不进入 history · 不执行工具</text>
+
+  <rect x="625" y="302" width="525" height="276" rx="18" fill="#ffffff" stroke="#a8cbb1" stroke-width="2"/>
+  <text x="653" y="340" class="lane">执行路径：Eino ReAct Agent</text>
+  <rect x="657" y="370" width="190" height="54" rx="11" fill="#eef8f1" stroke="#a8cbb1"/>
+  <text x="752" y="392" text-anchor="middle" class="label">用户自然语言</text>
+  <text x="752" y="413" text-anchor="middle" class="small">写入会话 history</text>
+  <line x1="847" y1="397" x2="901" y2="397" stroke="#56866a" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="913" y="370" width="199" height="54" rx="11" fill="#eef8f1" stroke="#a8cbb1"/>
+  <text x="1012" y="392" text-anchor="middle" class="label">模型生成 ToolCall</text>
+  <text x="1012" y="413" text-anchor="middle" class="small">基于 ToolInfo 决策</text>
+  <line x1="1012" y1="424" x2="1012" y2="462" stroke="#56866a" stroke-width="3" marker-end="url(#arrow)"/>
+  <rect x="744" y="474" width="368" height="70" rx="11" fill="#f1f8f3" stroke="#b5ceb9"/>
+  <text x="766" y="500" class="label">Eino ToolsNode 执行 Handler</text>
+  <text x="766" y="523" class="small">产生 ToolResult，并继续 Agent Loop</text>
+
+  <rect x="50" y="610" width="1100" height="58" rx="13" fill="#fff7e7" stroke="#d7bd85"/>
+  <text x="76" y="636" class="label">核心边界</text>
+  <text x="166" y="636" class="body">Catalog 回答“有什么、来自哪里、是否启用”；Eino 回答“何时调用、如何执行、怎样继续循环”。</text>
+  <text x="76" y="658" class="small">禁用工具仍可在管理路径中诊断，但绝不进入模型可调用集合。</text>
+</svg>

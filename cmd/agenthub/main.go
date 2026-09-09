@@ -2,6 +2,7 @@ package main
 
 import (
 	"agenthub/internal/session"
+	"agenthub/internal/toolcatalog"
 	"bufio"
 	"context"
 	"errors"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components"
-	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/flow/agent/react"
@@ -49,14 +49,23 @@ func run() error {
 		return fmt.Errorf("create project file tool: %w", err)
 	}
 
+	toolCatalog, err := toolcatalog.New(
+		toolcatalog.Entry{
+			Tool:    projectFileTool,
+			Source:  toolcatalog.SourceLocal,
+			Enabled: true,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create tool catalog: %w", err)
+	}
+
 	reactAgent, err := react.NewAgent(
 		ctx,
 		&react.AgentConfig{
 			ToolCallingModel: chatModel,
 			ToolsConfig: compose.ToolsNodeConfig{
-				Tools: []tool.BaseTool{
-					projectFileTool,
-				},
+				Tools: toolCatalog.EnabledTools(),
 			},
 		},
 	)
@@ -94,6 +103,13 @@ func run() error {
 		if input == "" {
 			continue
 		}
+		if strings.EqualFold(input, "/tools") {
+			if err := printToolCatalog(ctx, os.Stdout, toolCatalog); err != nil {
+				fmt.Printf("error: %v\n", err)
+			}
+			continue
+		}
+
 		if strings.EqualFold(input, "exit") || strings.EqualFold(input, "quit") {
 			fmt.Println("bye")
 			return nil

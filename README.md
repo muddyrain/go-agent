@@ -10,7 +10,7 @@ AgentHub 是一个用于学习企业级 Go 服务与 AI Agent 系统设计的渐
 go run ./cmd/agenthub
 ```
 
-当前 CLI 支持连续多轮输入，并提供受限的 `read_project_file` 本地工具：模型可按需读取项目根目录内的常见 UTF-8 文本文件；绝对路径、目录穿越、符号链接逃逸、`.env` 和超过 64 KiB 的文件会被拒绝。HTTP/SSE 和持久化将在后续课程实现。详细路线见 [`AGENTHUB_PLAN.md`](AGENTHUB_PLAN.md)。
+当前 CLI 支持连续多轮输入和 `/tools` 工具目录命令，并提供受限的 `read_project_file` 本地工具：模型可按需读取项目根目录内的常见 UTF-8 文本文件；绝对路径、目录穿越、符号链接逃逸、`.env` 和超过 64 KiB 的文件会被拒绝。工具目录统一展示工具来源、启用状态、描述与参数 Schema；当前只登记本地工具，真实 MCP 工具将在 Phase D 后续课程接入。HTTP/SSE 和持久化将在后续课程实现。详细路线见 [`AGENTHUB_PLAN.md`](AGENTHUB_PLAN.md)。
 
 ## 本地模型配置
 
@@ -34,9 +34,9 @@ AGENTHUB_MODEL_NAME=your-tool-calling-model
 
 - `cmd/agenthub/`：唯一正式应用入口；后续生产能力从这里演进。
 - `examples/`：Phase A、B 的可运行学习对照，不继续承载生产功能。
-- `internal/`：私有代码。现有 `agent`、`agentfactory`、`llm`、`memory`、`tokenizer`、`tool` 等自研 Runtime 包只为学习对照和早期实验保留，正式入口不依赖它们。
+- `internal/`：持续演进的私有生产代码，目前包含会话上下文和工具目录；历史自研 Runtime 已迁入 `examples/selfbuilt-runtime/internal/`。
 - `docs/`：产品蓝图、架构决策和长期学习图示。
-- `configs/`：应用配置。
+- `configs/`：后续生产配置；教学示例专用配置与示例放在同一目录。
 
 示例的用途和运行方式见 [`examples/README.md`](examples/README.md)。生产 Runtime 的选择依据见 [`ADR-0001`](docs/decisions/0001-use-eino-for-production-runtime.md)。
 
