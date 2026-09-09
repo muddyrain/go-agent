@@ -6,9 +6,14 @@
     "cloudwego",
     "Eino",
     "godotenv",
+    "Invokable",
     "jsonschema",
     "mapstructure",
+    "mcpadapter",
     "mcpclient",
-    "santhosh"
+    "mcpserver",
+    "santhosh",
+    "toolcatalog",
+    "toolutils"
   ]
 }

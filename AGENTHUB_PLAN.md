@@ -153,7 +153,7 @@ usage: input=0 output=0 total=0
 | Memory | 已实现 | 正式入口维护完整会话历史，并为每轮模型调用生成最近 3 个完整用户轮次的上下文视图；裁剪统计可见，工具调用链不会被拆散 | Phase F 持久化时区分会话历史、上下文策略和长期记忆 |
 | Streaming | 已实现 | 正式入口已消费 OpenAI 兼容服务的真实增量流；教学 Pipe 对照保留在历史示例中 | Phase E 映射为 SSE 事件 |
 | Agent Factory | 教学实现已归档 | 自研 Factory 仅由 `examples/selfbuilt-runtime` 使用；正式入口直接组装 Eino ReAct Agent | 出现真实重复后再提取生产组装边界 |
-| MCP Session / Adapter / Manager | 教学原型已归档 | 早期原型绑定自研 Tool 协议且没有真实传输，已封闭在教学示例 | Phase D 围绕 Eino 与真实 MCP 连接重新实现 |
+| MCP Session / Adapter / Manager | 单 Server 已实现 | 正式入口通过 stdio 启动独立 MCP Server 子进程，完成初始化、工具发现、Eino Tool 适配和远程调用；多 Server Manager 尚未进入生产主线 | D.3 处理多 Server 与名称冲突 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
 | 持久化 | 未实现 | 不可见 | 由“重启后会话丢失”这个问题驱动 |
 | RAG / Workflow / Multi-Agent | 未实现 | 不可见 | 由具体用户场景驱动 |
@@ -169,7 +169,7 @@ usage: input=0 output=0 total=0
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
-| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 进行中：D.1 已掌握 |
+| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 进行中：D.1—D.2 已掌握 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase D：工具中心与 MCP，D.1 已掌握**
+- 当前阶段：**Phase D：工具中心与 MCP，D.1—D.2 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.2**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -328,14 +328,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - D.1 最小测试：保护启用工具筛选、禁用工具仍可见、来源与 Schema 提取，以及 CLI 的来源和状态输出
 - D.1 理解验收：能说明 Catalog 的注册仅是条目保存和查询，不是执行 Registry；`List` 展示全部有效条目，非法元数据返回错误，`EnabledTools` 才执行启用过滤
 - D.1 调用链：[`docs/images/d1-tool-catalog-flow.svg`](docs/images/d1-tool-catalog-flow.svg)
+- D.2 真实连接：正式入口使用当前 AgentHub 可执行文件启动独立 stdio MCP Server 子进程，`internal/mcpclient.Session` 完成初始化握手与工具发现，Eino 官方 MCP Adapter 将 `add_numbers` 转换为 `tool.BaseTool`
+- D.2 Catalog 接线：发现到的远程工具以 `SourceMCP` 加入 D.1 Catalog；`/tools` 同时展示本地 `read_project_file` 与远程 `add_numbers`，ReAct Agent 仍通过统一的 `EnabledTools()` 调用
+- D.2 安全与生命周期：MCP 子进程不继承 AgentHub 模型密钥环境，stdio stdout 只承载协议消息；CLI 退出时关闭 Session 和子进程，初始化或工具发现失败会关闭 Client 并返回 Go error
+- D.2 最小测试：使用测试二进制启动真实 stdio 子进程，保护 Initialize → tools/list → tools/call 成功链路，并验证 Server 在握手前退出时返回带初始化语义的错误
+- D.2 可见结果：`/tools` 展示 2 个启用工具；模型调用 MCP `add_numbers` 计算 17.5 + 24.5，Callback 显示 ChatModel → Tool → ChatModel，最终回答为 42
+- D.2 理解验收：能说明 Session 持有 MCP Client 连接和已发现工具，Eino MCP Adapter 负责 MCP Tool 与 Eino Tool 的协议转换，Catalog 负责分类与启用筛选，ReAct Agent 决策调用、ToolsNode 执行；能区分可交给模型处理的远程业务失败与必须中断当前执行的连接、进程或 Context 失败
+- D.2 调用链：[`docs/images/d2-stdio-mcp-flow.svg`](docs/images/d2-stdio-mcp-flow.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**D.2 单 MCP Server 真实连接**
-- 下一节只做：选择最小可运行传输，建立一个真实 MCP Session，发现工具后转换为 Eino Tool 并通过现有 Catalog 与 CLI 调用
-- 下一节明确不做：多个 MCP Server、名称冲突、自动重连、HTTP/SSE、持久化、RAG 或 Web 页面
+- 下一节：**D.3 多 Server 与名称冲突**
+- 下一节只做：接入两个 Server，观察同名工具冲突，再建立最小命名空间和可读配置边界
+- 下一节明确不做：自动重连、HTTP/SSE、持久化、RAG 或 Web 页面
 
 ## 9. 下一节理解验收题
 
-D.2 仍只进行一轮集中验收，聚焦两个结论：MCP Session、工具发现和 Eino Tool Adapter 各自处于哪一层；为什么远程业务失败与连接或 Context 失败需要不同传播方式。
+D.2 的集中理解验收已通过：学习者能够说明 Session、Adapter、Catalog、ReAct Agent 与 ToolsNode 的职责链，并区分远程业务失败和连接、进程或 Context 失败的传播方式。
 
 ## 10. 历史路线处理
 

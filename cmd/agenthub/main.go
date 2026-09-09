@@ -1,6 +1,8 @@
 package main
 
 import (
+	"agenthub/internal/mcpclient"
+	"agenthub/internal/mcpserver"
 	"agenthub/internal/session"
 	"agenthub/internal/toolcatalog"
 	"bufio"
@@ -20,9 +22,19 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const maxContextTurns = 3
+const (
+	maxContextTurns = 3
+	mcpServerMode   = "mcp-server"
+)
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == mcpServerMode {
+		if err := mcpserver.ServeStdio(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		log.Fatal(err)
 	}
@@ -49,13 +61,38 @@ func run() error {
 		return fmt.Errorf("create project file tool: %w", err)
 	}
 
-	toolCatalog, err := toolcatalog.New(
-		toolcatalog.Entry{
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("get AgentHub executable: %w", err)
+	}
+	mcpSession, err := mcpclient.OpenStdio(
+		ctx,
+		executable,
+		mcpServerMode,
+	)
+	if err != nil {
+		return fmt.Errorf("open MCP session: %w", err)
+	}
+	defer func() {
+		if err := mcpSession.Close(); err != nil {
+			log.Printf("close MCP session: %v", err)
+		}
+	}()
+	entries := []toolcatalog.Entry{
+		{
 			Tool:    projectFileTool,
 			Source:  toolcatalog.SourceLocal,
 			Enabled: true,
 		},
-	)
+	}
+	for _, mcpTool := range mcpSession.Tools() {
+		entries = append(entries, toolcatalog.Entry{
+			Tool:    mcpTool,
+			Source:  toolcatalog.SourceMCP,
+			Enabled: true,
+		})
+	}
+	toolCatalog, err := toolcatalog.New(entries...)
 	if err != nil {
 		return fmt.Errorf("create tool catalog: %w", err)
 	}
