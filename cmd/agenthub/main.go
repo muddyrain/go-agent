@@ -72,7 +72,6 @@ func run() error {
 	}
 	reader := bufio.NewReader(os.Stdin)
 
-outer:
 	for {
 		fmt.Print("\n> ")
 
@@ -113,26 +112,13 @@ outer:
 
 		fmt.Printf("user: %s\n", input)
 		fmt.Print("assistant: ")
-		chunks := 0
-		for {
-			chunk, err := stream.Recv()
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			if err != nil {
-				stream.Close()
-				fmt.Printf("error: %v\n", err)
-				history = history[:len(history)-1]
-				continue outer
-			}
-			if chunk == nil {
-				stream.Close()
-				return fmt.Errorf("ReAct produced a nil stream chunk")
-			}
-			chunks++
-			fmt.Print(chunk.Content)
+
+		chunks, err := writeAssistantStream(os.Stdout, stream)
+		if err != nil {
+			fmt.Printf("\nerror: %v\n", err)
+			history = history[:len(history)-1]
+			continue
 		}
-		stream.Close()
 
 		fmt.Println()
 		fmt.Printf("chunks: %d\n", chunks)

@@ -168,7 +168,7 @@ usage: input=0 output=0 total=0
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
-| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1—C.2 已掌握 |
+| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1—C.4 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.3 已掌握**
+- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.4 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.3**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.4**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -301,14 +301,22 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - C.3 模型兼容：SystemMessage 约束需要文件时直接生成 ToolCall，避免模型先输出计划文字后被默认流式检查器提前判定为最终回答
 - C.3 理解验收：已理解 `.env` 等受限访问需要保护敏感信息；统一补全可恢复 ToolResult 与系统 Go error 的区别，以及 Tool 名称、描述、参数 Schema 和 SystemMessage共同参与模型工具决策
 - C.3 调用链：[`docs/images/c3-project-file-tool-flow.svg`](docs/images/c3-project-file-tool-flow.svg)
+- C.4 流消费边界：新增 `writeAssistantStream`，由单一消费者负责逐块读取、输出、统计 Chunk，并通过 `defer` 在正常 EOF 或提前失败时关闭 StreamReader
+- C.4 成功语义：收到任意数量 Chunk 都只代表部分进度；只有 `Recv()` 返回 `io.EOF` 才表示生产端不会再发送数据，本轮回答可以进入后续消息收集
+- C.4 失败语义：读取、nil Chunk 或输出写入失败时返回已接收 Chunk 数和错误；终端已显示的部分内容无法撤回，但 `run` 会回滚本轮 UserMessage，不把残缺回答加入历史
+- C.4 职责边界：`writeAssistantStream` 管理单个 StreamReader 生命周期，`run` 管理终端会话、Agent 调用和历史一致性；当前仍不抽取新的 Runtime 接口
+- C.4 最小测试：由课程辅助补充正常多 Chunk 到 EOF 与半途失败两条测试，学习者聚焦核心流消费实现
+- C.4 可见结果：真实模型回答完成后打印 52 个 Chunk 并重新出现输入提示符，普通知识问答未调用项目文件工具
+- C.4 理解验收：能说明 EOF 是完整成功边界；流由唯一消费者关闭，历史回滚由掌握会话状态的 `run` 负责
+- C.4 生命周期图：[`docs/images/c4-stream-lifecycle.svg`](docs/images/c4-stream-lifecycle.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**C.4 流式输出生命周期**
-- 下一节只做：明确一次模型流与整个 Agent 运行的结束边界，验证流关闭、中途中断和半途失败，并改善终端可恢复性
-- 下一节明确不做：HTTP/SSE、MCP、数据库、RAG、Web 页面或新的 Runtime 抽象
+- 下一节：**C.5 多轮上下文与 Memory**
+- 下一节只做：区分完整会话历史与发送给模型的上下文视图，观察裁剪原因，并保证 ToolCall 与 ToolMessage 不被拆散
+- 下一节明确不做：持久化、多用户、HTTP/SSE、MCP、RAG、Web 页面或新的 Runtime 抽象
 
 ## 9. 下一节理解验收题
 
-C.4 仍只进行一轮集中验收，聚焦两个结论：为什么收到某个 Chunk 不代表整个 Agent 已结束；流读取、关闭、Context 取消和半途失败分别由谁负责。
+C.5 仍只进行一轮集中验收，聚焦两个结论：为什么完整会话历史不应等同于每次发给模型的上下文视图；为什么裁剪必须以完整对话单元为边界，不能拆散 Assistant ToolCall 与 ToolMessage。
 
 ## 10. 历史路线处理
 
