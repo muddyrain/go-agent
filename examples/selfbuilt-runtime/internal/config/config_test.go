@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"agenthub/internal/apperr"
+	"agenthub/examples/selfbuilt-runtime/internal/apperr"
 )
 
 func validConfig() *Config {

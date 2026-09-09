@@ -1,6 +1,6 @@
 package agentfactory
 
-import "agenthub/internal/config"
+import "agenthub/examples/selfbuilt-runtime/internal/config"
 
 // ConfigFromApp 将应用层配置转换为 Factory 自己的构造配置。
 // 转换集中在 Factory 边界，避免 config 包依赖 Agent 的组装实现。

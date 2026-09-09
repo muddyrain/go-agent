@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"agenthub/internal/llm"
-	"agenthub/internal/memory"
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/memory"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 // Agent 负责协调模型、记忆和工具系统，驱动完整的模型调用循环。

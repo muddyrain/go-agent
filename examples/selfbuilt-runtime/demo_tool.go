@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 type weatherArguments struct {

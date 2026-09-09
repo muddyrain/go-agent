@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"agenthub/internal/llm"
-	"agenthub/internal/tokenizer"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/tokenizer"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

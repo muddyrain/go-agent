@@ -146,14 +146,14 @@ usage: input=0 output=0 total=0
 
 | 能力 | 实现状态 | 串联/可见状态 | 后续处理 |
 |---|---|---|---|
-| 配置、日志、应用错误 | 已实现 | 已进入入口，可见启动日志 | 在终端 Agent 入口中复用并解释 |
-| Message / Model 协议 | 已实现 | 正式入口已使用 OpenAI 兼容真实模型完成工具调用与流式回答；教学实现保留在 `examples/` | Phase C 继续加入交互式多轮输入 |
-| Tool / Registry / Executor | 已实现 | 自研天气工具与 Eino Tool/ToolsNode 均已进入入口，职责映射已完成 | Phase D 接真实 MCP |
-| Agent Loop | 已实现 | 自研 Loop 与 Eino ReAct Agent 都已完成闭环；正式入口已收敛到 Eino，自研实现归档为学习对照 | Phase C 接真实模型并继续演进正式入口 |
+| 配置、日志、应用错误 | 教学实现已归档 | 旧配置、日志和错误包已随自研 Runtime 迁入 `examples/selfbuilt-runtime/internal/`；正式入口使用当前环境配置与错误处理 | 后续出现生产需求时从真实入口重新提取 |
+| Message / Model 协议 | 已实现 | 正式入口使用 Eino `schema.Message` 与 OpenAI 兼容模型；自研协议封闭在教学示例 | Phase D 继续沿 Eino 协议扩展 |
+| Tool / Registry / Executor | 已实现 | 正式入口使用 Eino Tool/ToolsNode；自研 Tool、Registry、Executor 封闭在教学示例 | Phase D 接真实 MCP |
+| Agent Loop | 已实现 | 正式入口使用 Eino ReAct Agent；自研 Loop 封闭在 `examples/selfbuilt-runtime/internal/` | 生产主线只继续演进 Eino |
 | Memory | 已实现 | 正式入口维护完整会话历史，并为每轮模型调用生成最近 3 个完整用户轮次的上下文视图；裁剪统计可见，工具调用链不会被拆散 | Phase F 持久化时区分会话历史、上下文策略和长期记忆 |
 | Streaming | 已实现 | 正式入口已消费 OpenAI 兼容服务的真实增量流；教学 Pipe 对照保留在历史示例中 | Phase E 映射为 SSE 事件 |
-| Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
-| MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
+| Agent Factory | 教学实现已归档 | 自研 Factory 仅由 `examples/selfbuilt-runtime` 使用；正式入口直接组装 Eino ReAct Agent | 出现真实重复后再提取生产组装边界 |
+| MCP Session / Adapter / Manager | 教学原型已归档 | 早期原型绑定自研 Tool 协议且没有真实传输，已封闭在教学示例 | Phase D 围绕 Eino 与真实 MCP 连接重新实现 |
 | HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
 | 持久化 | 未实现 | 不可见 | 由“重启后会话丢失”这个问题驱动 |
 | RAG / Workflow / Multi-Agent | 未实现 | 不可见 | 由具体用户场景驱动 |
@@ -279,7 +279,7 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - B.4 抽象结论：是否新增项目级 `Runtime` 接口取决于真实调用方是否产生重复、耦合或变化来源，而不取决于 Eino 是否存在同名接口；当前不创建预留抽象
 - B.4 理解验收：能说明框架降低通用 Agent 执行的自研和维护成本，AgentHub 仍需编写具体产品能力，并接受在真实问题出现前不提前封装 Runtime
 - B.5 入口收敛：`cmd/agenthub` 现在是唯一正式入口并运行 Eino 流式 ReAct 闭环；Phase A 自研入口与 B.1/B.2 阶段性实现归档到 `examples/`
-- B.5 保留边界：自研 `internal/agent`、`llm`、`tool` 等包只因可运行学习对照和早期实验仍依赖而保留，不是未来生产底层，也不再增加生产特性
+- B.5 保留边界：自研 `agent`、`llm`、`tool` 等包在 Phase C 收口时已整体迁入 `examples/selfbuilt-runtime/internal/`，只维持可运行学习对照，不是未来生产底层
 - B.5 理解验收：能判断真实模型应从 `cmd/agenthub` 接入；已统一校正自研 Runtime 包的保留原因与生产身份
 - C.1 真实模型：`cmd/agenthub/openai_model.go` 从环境变量创建 Eino OpenAI 兼容 ChatModel，并以 60 秒请求超时保护外部调用
 - C.1 配置边界：`cmd/agenthub/env.go` 在应用启动时可选加载 `.env`；系统环境变量优先，`.env` 不存在不阻塞生产启动，真实密钥保持在 Git 之外
@@ -316,14 +316,19 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - C.5 职责边界：`ContextWindow` 负责无副作用地构建派生视图，`run` 继续拥有完整历史并决定何时追加或回滚；当前按轮次数裁剪，不实现 Token 预算、摘要或长期记忆
 - C.5 理解验收：能说明不能用裁剪视图覆盖完整 history，并能解释按最后 N 条消息裁剪会破坏对话起点和 Assistant ToolCall → ToolMessage 协议关联
 - C.5 上下文图：[`docs/images/c5-context-window.svg`](docs/images/c5-context-window.svg)
+- Phase C 收口边界：自研 Runtime、旧配置日志支持包和绑定旧 Tool 协议的 MCP 原型已整体迁入 `examples/selfbuilt-runtime/`；根 `internal/` 只保留当前生产会话代码
+- Phase C 收口编译约束：教学实现放入 `examples/selfbuilt-runtime/internal/` 后，Go 会禁止该目录树以外的 `cmd/agenthub` 导入，从“文档约定”升级为编译期隔离
+- Phase C 收口验证：正式入口依赖中只出现 `agenthub/internal/session`；`go run ./examples/selfbuilt-runtime` 仍完成自研 ToolCall 闭环；全项目测试、静态检查和构建通过
+- Phase C 收口理解验收：理解 `examples` 名称只表达意图，嵌套 `internal` 才提供可靠导入边界；旧 MCP 原型因绑定自研 Tool/Registry 且缺少真实传输，不作为 Phase D 生产基础
+- Phase C 收口图：[`docs/images/c-phase-boundary-cleanup.svg`](docs/images/c-phase-boundary-cleanup.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**Phase C 收口：整理历史自研 Runtime 的教学边界**
-- 下一节只做：把生产主线与历史教学实现的目录和依赖边界整理清楚，确保 `cmd/agenthub` 不依赖旧 Runtime，保留仍有教学价值的可运行对照
-- 下一节明确不做：新增 Agent 功能、真实 MCP 连接、HTTP/SSE、持久化、RAG 或大规模生产架构设计
+- 下一节：**D.1 工具目录**
+- 下一节只做：在生产主线统一描述和展示 Agent 可用工具的名称、来源、启用状态、描述和参数 Schema，为本地工具与后续真实 MCP 工具建立同一目录视图
+- 下一节明确不做：真实 MCP 连接、远程调用、HTTP/SSE、持久化、RAG、Web 页面或重建自研 Registry
 
 ## 9. 下一节理解验收题
 
-Phase C 收口只进行一轮集中验收，聚焦两个结论：为什么历史教学实现不能继续占用生产包边界；为什么目录迁移或删除前必须先确认正式入口依赖和教学示例仍可独立运行。
+D.1 仍只进行一轮集中验收，聚焦两个结论：工具目录与工具执行器分别解决什么问题；为什么目录可以统一描述本地与 MCP 工具，却不应重新实现 Eino 的 Tool 调用循环。
 
 ## 10. 历史路线处理
 

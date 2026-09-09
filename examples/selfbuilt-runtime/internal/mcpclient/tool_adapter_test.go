@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 func TestToolAdapterDefinition(t *testing.T) {

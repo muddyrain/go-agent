@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 const toolNamespaceSeparator = "__"

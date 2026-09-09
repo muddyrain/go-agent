@@ -1,7 +1,7 @@
 package llm
 
 import (
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 	"encoding/json"
 	"reflect"
 	"testing"

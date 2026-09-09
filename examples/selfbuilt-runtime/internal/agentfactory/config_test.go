@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"agenthub/internal/config"
+	"agenthub/examples/selfbuilt-runtime/internal/config"
 )
 
 func TestConfigFromApp(t *testing.T) {

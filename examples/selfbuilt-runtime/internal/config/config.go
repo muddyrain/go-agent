@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agenthub/internal/apperr"
+	"agenthub/examples/selfbuilt-runtime/internal/apperr"
 
 	"github.com/spf13/viper"
 )

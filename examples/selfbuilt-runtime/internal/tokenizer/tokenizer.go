@@ -1,6 +1,6 @@
 package tokenizer
 
-import "agenthub/internal/llm"
+import "agenthub/examples/selfbuilt-runtime/internal/llm"
 
 // Tokenizer 抽象不同模型的消息 Token 计算规则，避免 Memory 依赖具体模型实现。
 type Tokenizer interface {

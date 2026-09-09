@@ -2,7 +2,7 @@
 
 本文件归档路线校准前已经完成的课程验收记录。它回答“过去实现并验证了什么”；当前教学顺序、状态口径和下一步以仓库根目录的 [`AGENTHUB_PLAN.md`](../AGENTHUB_PLAN.md) 为准。
 
-> 说明：这里的“已完成”沿用旧口径，主要表示组件实现与测试已完成，不自动代表已接入应用入口或学习者已经掌握。
+> 说明：这里的“已完成”沿用旧口径，主要表示组件实现与测试已完成，不自动代表已接入应用入口或学习者已经掌握。文中 `internal/...` 路径记录的是课程完成当时的位置；Phase C 收口后，这些自研实现已迁入 `examples/selfbuilt-runtime/internal/`。
 
 
 ### 0.1 项目结构与 Go Module
@@ -134,5 +134,5 @@
 - 验证：批次成功、批次内重名、已有名称冲突、后置非法 Schema 不产生部分写入、两个 Server 的同名远程工具注册与执行、构造参数校验、重复 Server、注册失败后重试和 ListTools 错误链测试通过；`internal/mcpclient` 与 `internal/tool` 数据竞争检查及 `make check` 通过
 - 关键概念：本地名称与远程名称分离、注册阶段与运行阶段分离、批量操作全成功或全失败、锁外准备与锁内提交、检查与写入的同一临界区、接口切片与具体类型切片不兼容，以及 Manager、Adapter、Registry 的职责边界
 - 当前边界：Manager 在添加 Server 时串行持锁执行工具发现与注册；尚未负责关闭全部 Session、连接状态、超时分类、断线检测或重连
-- 学习图示：`internal/mcpclient/mcp-multi-server-manager-flow.svg`
+- 学习图示：`examples/selfbuilt-runtime/internal/mcpclient/mcp-multi-server-manager-flow.svg`
 - 下一步：进入 1.7.4，设计 MCP Session 的超时、关闭、断线与可测试重连策略

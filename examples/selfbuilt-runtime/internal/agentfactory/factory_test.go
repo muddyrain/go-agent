@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"agenthub/internal/llm"
-	"agenthub/internal/tokenizer"
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/tokenizer"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 type stubModel struct {

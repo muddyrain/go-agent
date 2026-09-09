@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 type fakeModel struct {

@@ -124,7 +124,7 @@ Eino 官方将自身定位为 Go 的 LLM 应用开发框架，并提供组件抽
 
 ### 4.3 当前自研 Runtime 的归宿
 
-现有 `internal/llm`、`internal/tool`、`internal/agent`、`internal/memory`、`internal/agentfactory` 不立即删除，因为它们已经成为理解 Agent 内核的实验台。
+Phase C 收口后，自研 Runtime 及其配置、测试和早期 MCP 协议实验已经整体迁入 `examples/selfbuilt-runtime/`，成为理解 Agent 内核的封闭实验台；根 `internal/` 只保留继续演进的生产应用代码。
 
 处理原则：
 
@@ -132,7 +132,7 @@ Eino 官方将自身定位为 Go 的 LLM 应用开发框架，并提供组件抽
 2. Phase B 用 Eino 实现同一条链路，逐项比较概念映射。
 3. 比较后记录架构决策：生产主线使用 Eino。
 4. 业务层不得同时依赖两套 Runtime。
-5. 自研实现移入清晰的学习边界，或在完成对照学习后删除；不继续扩展成第二套生产框架。
+5. 自研实现已经移入 `examples/selfbuilt-runtime/internal/`；嵌套 `internal` 的编译期导入边界阻止生产代码依赖，不继续扩展成第二套生产框架。
 
 ### 4.4 明确不做
 

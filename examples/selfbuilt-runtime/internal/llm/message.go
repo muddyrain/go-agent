@@ -3,7 +3,7 @@ package llm
 import (
 	"encoding/json"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 // Role 表示消息在模型对话协议中的身份；使用独立类型和常量，避免业务代码散落角色字符串。

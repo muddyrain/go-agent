@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Phase C 生产与教学代码边界收口</title>
+  <desc id="desc">展示生产入口与 Eino 应用代码保留在根目录，历史自研 Runtime 和旧 MCP 原型迁入教学示例，并由 Go internal 规则形成编译期隔离。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#52788a"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17242c; }
+      .subtitle { font: 400 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #5d6c75; }
+      .lane { font: 700 20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #1b2b34; }
+      .label { font: 600 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #263b46; }
+      .body { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #485b65; }
+      .small { font: 400 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #667780; }
+      .mono { font: 600 14px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #31505e; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="720" fill="#f6f5f0"/>
+  <text x="58" y="58" class="title">Phase C 收口：生产与教学代码边界</text>
+  <text x="58" y="88" class="subtitle">不是删除学习成果，而是让目录位置与真实职责保持一致</text>
+
+  <rect x="50" y="122" width="510" height="420" rx="18" fill="#ffffff" stroke="#a9c8d5" stroke-width="2"/>
+  <text x="80" y="160" class="lane">生产主线</text>
+  <text x="80" y="186" class="small">继续演进的 AgentHub 应用代码</text>
+
+  <rect x="80" y="216" width="450" height="70" rx="12" fill="#e9f4f8" stroke="#a7c7d5"/>
+  <text x="104" y="244" class="mono">cmd/agenthub/</text>
+  <text x="104" y="268" class="body">CLI 组合根、真实模型、真实本地工具、流式输出</text>
+
+  <path d="M305 286 L305 326" fill="none" stroke="#52788a" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="80" y="330" width="450" height="70" rx="12" fill="#edf7ef" stroke="#a6c9af"/>
+  <text x="104" y="358" class="mono">internal/session/</text>
+  <text x="104" y="382" class="body">完整历史与模型上下文视图等生产会话策略</text>
+
+  <rect x="80" y="432" width="450" height="76" rx="12" fill="#f3f7f8" stroke="#c2d1d7"/>
+  <text x="104" y="460" class="label">通用 Agent Runtime：Eino</text>
+  <text x="104" y="484" class="body">后续 D—​I 阶段不得回到自研 Runtime 扩展</text>
+
+  <rect x="640" y="122" width="510" height="420" rx="18" fill="#ffffff" stroke="#d4bc8d" stroke-width="2"/>
+  <text x="670" y="160" class="lane">历史教学闭包</text>
+  <text x="670" y="186" class="small">只维持 Phase A 与早期协议实验的可运行对照</text>
+
+  <rect x="670" y="216" width="450" height="70" rx="12" fill="#fff7e8" stroke="#d8bd87"/>
+  <text x="694" y="244" class="mono">examples/selfbuilt-runtime/</text>
+  <text x="694" y="268" class="body">教学入口、固定模型、天气工具和专用配置</text>
+
+  <path d="M895 286 L895 326" fill="none" stroke="#a38349" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="670" y="330" width="450" height="110" rx="12" fill="#fffaf0" stroke="#d8bd87"/>
+  <text x="694" y="358" class="mono">examples/selfbuilt-runtime/internal/</text>
+  <text x="694" y="383" class="body">agent · llm · tool · memory · factory</text>
+  <text x="694" y="407" class="body">config · logger · apperr · tokenizer · mcpclient</text>
+  <text x="694" y="429" class="small">旧 MCP 原型仍绑定自研 Tool/Registry，不进入 Phase D</text>
+
+  <rect x="670" y="466" width="450" height="42" rx="10" fill="#f1eee6" stroke="#cac2af"/>
+  <text x="694" y="492" class="label">允许修复教学错误，不新增生产特性</text>
+
+  <line x1="600" y1="132" x2="600" y2="532" stroke="#b6a477" stroke-width="3" stroke-dasharray="9 8"/>
+  <rect x="515" y="552" width="170" height="42" rx="21" fill="#fff3d8" stroke="#c9a966"/>
+  <text x="600" y="579" text-anchor="middle" class="label">Go internal 编译边界</text>
+
+  <rect x="50" y="620" width="1100" height="62" rx="13" fill="#eaf2f5" stroke="#bad0d8"/>
+  <text x="76" y="647" class="label">验证结果</text>
+  <text x="176" y="647" class="body">正式入口依赖只含 agenthub/internal/session；教学入口仍能运行完整 ToolCall 闭环；全项目检查通过。</text>
+  <text x="76" y="670" class="small">目录名表达意图，嵌套 internal 提供编译期约束，两者共同防止生产代码误用历史实现。</text>
+</svg>

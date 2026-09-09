@@ -3,11 +3,11 @@ package agentfactory
 import (
 	"fmt"
 
-	"agenthub/internal/agent"
-	"agenthub/internal/llm"
-	"agenthub/internal/memory"
-	"agenthub/internal/tokenizer"
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/agent"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/memory"
+	"agenthub/examples/selfbuilt-runtime/internal/tokenizer"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 // MemoryType 标识 Factory 支持的 Memory 构造策略。

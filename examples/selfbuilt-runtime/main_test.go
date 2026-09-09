@@ -1,8 +1,8 @@
 package main
 
 import (
-	"agenthub/internal/config"
-	"agenthub/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/config"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
 	"context"
 	"strings"
 	"testing"

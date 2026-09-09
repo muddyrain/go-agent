@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 // ToolAdapter 把一个 MCP 远程工具适配成 AgentHub 的 tool.Tool。

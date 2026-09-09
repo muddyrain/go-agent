@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agenthub/internal/apperr"
-	"agenthub/internal/llm"
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/apperr"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 type demoModel struct{}

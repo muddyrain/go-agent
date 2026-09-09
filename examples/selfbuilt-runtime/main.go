@@ -6,14 +6,14 @@ import (
 	"log/slog"
 	"os"
 
-	"agenthub/internal/agent"
-	"agenthub/internal/agentfactory"
-	"agenthub/internal/apperr"
-	"agenthub/internal/config"
-	"agenthub/internal/llm"
-	"agenthub/internal/logger"
-	"agenthub/internal/tokenizer"
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/agent"
+	"agenthub/examples/selfbuilt-runtime/internal/agentfactory"
+	"agenthub/examples/selfbuilt-runtime/internal/apperr"
+	"agenthub/examples/selfbuilt-runtime/internal/config"
+	"agenthub/examples/selfbuilt-runtime/internal/llm"
+	"agenthub/examples/selfbuilt-runtime/internal/logger"
+	"agenthub/examples/selfbuilt-runtime/internal/tokenizer"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 func main() {
@@ -28,7 +28,7 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.Load("configs/config.yaml")
+	cfg, err := config.Load("examples/selfbuilt-runtime/config.yaml")
 	if err != nil {
 		return err
 	}

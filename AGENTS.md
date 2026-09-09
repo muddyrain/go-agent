@@ -54,8 +54,9 @@ go run ./cmd/agenthub
 
 - 正式应用入口：`cmd/agenthub/`，后续生产功能统一使用 Eino。
 - 教学对照入口：`examples/`，不得继续承载新的生产功能。
-- 私有业务代码：`internal/`；其中现有自研 Runtime 包仅为历史教学对照和早期实验保留，新生产代码不得继续依赖。
-- 配置文件：`configs/`
+- 私有生产代码：`internal/`；当前包含会话上下文等 AgentHub 应用逻辑。
+- 历史自研 Runtime：`examples/selfbuilt-runtime/internal/`，仅供 Phase A 教学对照；生产代码不得依赖或继续扩展。
+- 生产配置文件按具体阶段放在 `configs/`；教学示例专用配置与示例放在同一目录。
 - 项目脚本：`scripts/`
 - 项目文档：`docs/`
 - 学习计划：`AGENTHUB_PLAN.md`

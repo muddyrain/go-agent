@@ -3,7 +3,7 @@ package llm
 import (
 	"context"
 
-	"agenthub/internal/tool"
+	"agenthub/examples/selfbuilt-runtime/internal/tool"
 )
 
 // Request 是一次模型调用的完整输入；Tools 只包含模型可见的工具定义，不包含本地执行实现。

@@ -15,6 +15,6 @@
 ## 维护边界
 
 - 示例允许为解释已有原理而修复错误，但不新增生产特性。
-- 自研 Runtime 的支持包目前仍位于 `internal/agent`、`internal/agentfactory`、`internal/llm`、`internal/memory`、`internal/tokenizer` 和 `internal/tool`；保留它们是为了维持 Phase A 的可运行对照，不表示生产入口继续使用它们。
-- `internal/mcpclient` 仍属于早期自研协议实验，尚未进入正式入口；Phase D 接入真实 MCP 时重新评估，不直接当作现成生产实现。
+- 自研 Runtime 及其配置、测试和早期 MCP 协议实验已经收拢到 `selfbuilt-runtime/`；其中支持包位于 `selfbuilt-runtime/internal/`，Go 的 `internal` 导入规则会阻止目录树之外的生产代码依赖它们。
+- 早期 `mcpclient` 绑定自研 `tool.Tool` 与 `Registry`，只保留为历史协议实验；Phase D 将围绕 Eino 与真实 MCP 连接重新实现，不从该包继续扩展。
 - 新的生产能力统一从 `cmd/agenthub` 出发，并使用 Eino 承担通用 Agent Runtime 职责。
