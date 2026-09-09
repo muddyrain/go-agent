@@ -4,13 +4,13 @@ AgentHub 是一个用于学习企业级 Go 服务与 AI Agent 系统设计的渐
 
 ## 当前可见能力
 
-正式入口已接入 OpenAI 兼容模型，使用 Eino ReAct Agent 完成真实模型工具调用、流式输出与 Callback 观察：
+正式入口已接入 OpenAI 兼容模型，使用 Eino ReAct Agent 提供交互式多轮 CLI、真实模型工具调用、流式输出与 Callback 观察：
 
 ```bash
 go run ./cmd/agenthub
 ```
 
-当前输入仍是固定的天气问题；交互式多轮 CLI、HTTP/SSE 和持久化将在后续课程实现。详细路线见 [`AGENTHUB_PLAN.md`](AGENTHUB_PLAN.md)。
+当前 CLI 支持连续多轮输入，并提供受限的 `read_project_file` 本地工具：模型可按需读取项目根目录内的常见 UTF-8 文本文件；绝对路径、目录穿越、符号链接逃逸、`.env` 和超过 64 KiB 的文件会被拒绝。HTTP/SSE 和持久化将在后续课程实现。详细路线见 [`AGENTHUB_PLAN.md`](AGENTHUB_PLAN.md)。
 
 ## 本地模型配置
 

@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.2 已掌握**
+- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.3 已掌握**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1 真实模型接入**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -281,7 +281,7 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - B.5 入口收敛：`cmd/agenthub` 现在是唯一正式入口并运行 Eino 流式 ReAct 闭环；Phase A 自研入口与 B.1/B.2 阶段性实现归档到 `examples/`
 - B.5 保留边界：自研 `internal/agent`、`llm`、`tool` 等包只因可运行学习对照和早期实验仍依赖而保留，不是未来生产底层，也不再增加生产特性
 - B.5 理解验收：能判断真实模型应从 `cmd/agenthub` 接入；已统一校正自研 Runtime 包的保留原因与生产身份
-- C.1 真实模型：`cmd/agenthub/openai_model.go` 从环境变量创建 Eino OpenAI 兼容 ChatModel，并以 30 秒请求超时保护外部调用
+- C.1 真实模型：`cmd/agenthub/openai_model.go` 从环境变量创建 Eino OpenAI 兼容 ChatModel，并以 60 秒请求超时保护外部调用
 - C.1 配置边界：`cmd/agenthub/env.go` 在应用启动时可选加载 `.env`；系统环境变量优先，`.env` 不存在不阻塞生产启动，真实密钥保持在 Git 之外
 - C.1 可见结果：真实模型第一轮生成 `get_weather` ToolCall，工具返回结果后第二轮模型流式生成最终天气回答；一次实测最终回答收到 14 个增量 Chunk
 - C.1 最小测试：只保护环境变量优先、缺少 `.env` 可启动、缺少 API Key 联网前失败，不用网络测试重复验证 Provider
@@ -293,14 +293,22 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - C.2 职责边界：终端 I/O 是 `cmd/agenthub` 的场景适配职责，Eino ReAct Agent 只负责基于消息执行模型—工具循环；当前历史由 CLI 应用层显式传入和追加，不是 Eino 自动持久化
 - C.2 理解验收：能说明终端 I/O 不应进入通用 Agent 执行层，并能用跨用户称呼串线的例子解释会话历史必须按用户/会话隔离
 - C.2 调用链：[`docs/images/c2-interactive-cli-flow.svg`](docs/images/c2-interactive-cli-flow.svg)
+- C.3 真实本地工具：正式入口用 `read_project_file` 替换固定天气演示工具，模型根据 Tool Schema 与 SystemMessage 自主决定是否读取项目文件
+- C.3 安全边界：只允许项目根目录内的常见 UTF-8 文本文件；拒绝绝对路径、`../` 穿越、符号链接逃逸、`.env`、目录和超过 64 KiB 的文件
+- C.3 错误分层：路径拒绝、文件不存在或过大等可恢复失败以 ToolResult 文本返回，使模型能够解释并继续会话；Context 取消以 Go error 中断已失效的执行
+- C.3 最小测试：验证合法文本读取、路径穿越与 `.env` 拒绝、符号链接逃逸拒绝；测试使用 `t.TempDir()`，不读取真实仓库
+- C.3 可见结果：自然语言要求概括 `README.md` 时模型直接调用 `read_project_file`；普通 `defer` 问答不调用工具；读取 `.env` 时模型解释安全拒绝且 CLI 继续运行
+- C.3 模型兼容：SystemMessage 约束需要文件时直接生成 ToolCall，避免模型先输出计划文字后被默认流式检查器提前判定为最终回答
+- C.3 理解验收：已理解 `.env` 等受限访问需要保护敏感信息；统一补全可恢复 ToolResult 与系统 Go error 的区别，以及 Tool 名称、描述、参数 Schema 和 SystemMessage共同参与模型工具决策
+- C.3 调用链：[`docs/images/c3-project-file-tool-flow.svg`](docs/images/c3-project-file-tool-flow.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**C.3 真实本地工具**
-- 下一节只做：把当前教学天气工具升级为一个有实际价值、副作用可控的本地工具，由模型自主决定是否调用，并观察参数校验与失败反馈
+- 下一节：**C.4 流式输出生命周期**
+- 下一节只做：明确一次模型流与整个 Agent 运行的结束边界，验证流关闭、中途中断和半途失败，并改善终端可恢复性
 - 下一节明确不做：HTTP/SSE、MCP、数据库、RAG、Web 页面或新的 Runtime 抽象
 
 ## 9. 下一节理解验收题
 
-C.3 仍只进行一轮集中验收，聚焦两个结论：为什么有实际副作用的本地工具需要明确参数与失败边界；为什么模型负责决定是否调用工具，而应用代码不应按关键词写死调用路径。
+C.4 仍只进行一轮集中验收，聚焦两个结论：为什么收到某个 Chunk 不代表整个 Agent 已结束；流读取、关闭、Context 取消和半途失败分别由谁负责。
 
 ## 10. 历史路线处理
 

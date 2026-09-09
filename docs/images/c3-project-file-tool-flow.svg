@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="title desc">
+  <title id="title">C.3 安全项目文件工具调用链</title>
+  <desc id="desc">展示模型根据工具描述自主决定是否调用 read_project_file，以及工具对路径、符号链接、文件类型、大小和 UTF-8 内容的安全检查。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#496780"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#b24b4b"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#18232d; }
+      .sub { font: 400 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#5e6b76; }
+      .h { font: 700 16px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#18232d; }
+      .p { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#40505f; }
+      .small { font: 400 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#536472; }
+      .edge { font: 600 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#496780; }
+      .bad { font: 600 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill:#a13f3f; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="800" fill="#f7f8f6"/>
+  <text x="64" y="55" class="title">C.3：模型自主调用的安全项目文件工具</text>
+  <text x="64" y="84" class="sub">应用只注册能力与约束，不按关键词硬编码调用；工具把可恢复拒绝返回给模型解释</text>
+
+  <rect x="58" y="122" width="230" height="116" rx="15" fill="#edf5fb" stroke="#91b6d1"/>
+  <text x="173" y="155" text-anchor="middle" class="h">用户请求</text>
+  <text x="173" y="184" text-anchor="middle" class="p">“读取 README.md”</text>
+  <text x="173" y="211" text-anchor="middle" class="p">或普通 Go 知识问题</text>
+
+  <rect x="356" y="122" width="284" height="116" rx="15" fill="#f2f7f2" stroke="#96bd99"/>
+  <text x="498" y="155" text-anchor="middle" class="h">ChatModel 自主决策</text>
+  <text x="498" y="184" text-anchor="middle" class="p">依据 SystemMessage + Tool 名称</text>
+  <text x="498" y="211" text-anchor="middle" class="p">描述 + 参数 JSON Schema</text>
+
+  <line x1="288" y1="180" x2="348" y2="180" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="708" y="108" width="246" height="88" rx="15" fill="#fff8ec" stroke="#d7ae69"/>
+  <text x="831" y="140" text-anchor="middle" class="h">无需项目文件</text>
+  <text x="831" y="168" text-anchor="middle" class="p">直接生成最终回答</text>
+  <path d="M640 154 L700 154" fill="none" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="671" y="139" text-anchor="middle" class="edge">不调用</text>
+
+  <rect x="708" y="244" width="246" height="88" rx="15" fill="#fff8ec" stroke="#d7ae69"/>
+  <text x="831" y="276" text-anchor="middle" class="h">生成 ToolCall</text>
+  <text x="831" y="304" text-anchor="middle" class="p">read_project_file { path }</text>
+  <path d="M620 218 C650 252 676 286 700 286" fill="none" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="657" y="249" class="edge">需要读取</text>
+
+  <rect x="996" y="214" width="226" height="146" rx="15" fill="#ffffff" stroke="#bdc8d0"/>
+  <text x="1109" y="246" text-anchor="middle" class="h">InferTool / ToolsNode</text>
+  <text x="1109" y="275" text-anchor="middle" class="p">JSON 参数解码</text>
+  <text x="1109" y="301" text-anchor="middle" class="p">执行 typed Handler</text>
+  <text x="1109" y="327" text-anchor="middle" class="p">返回 ToolMessage</text>
+  <line x1="954" y1="286" x2="988" y2="286" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="92" y="414" width="1096" height="210" rx="18" fill="#ffffff" stroke="#cbd4d9"/>
+  <text x="118" y="448" class="h">read_project_file 安全检查顺序</text>
+
+  <rect x="120" y="480" width="182" height="98" rx="12" fill="#eef5fb" stroke="#9cbacd"/>
+  <text x="211" y="510" text-anchor="middle" class="h">1. 参数与敏感路径</text>
+  <text x="211" y="536" text-anchor="middle" class="small">非空、非绝对路径</text>
+  <text x="211" y="558" text-anchor="middle" class="small">拒绝 .env</text>
+
+  <rect x="340" y="480" width="182" height="98" rx="12" fill="#eef5fb" stroke="#9cbacd"/>
+  <text x="431" y="510" text-anchor="middle" class="h">2. 根目录边界</text>
+  <text x="431" y="536" text-anchor="middle" class="small">filepath.Rel</text>
+  <text x="431" y="558" text-anchor="middle" class="small">拒绝 ../ 穿越</text>
+
+  <rect x="560" y="480" width="182" height="98" rx="12" fill="#eef5fb" stroke="#9cbacd"/>
+  <text x="651" y="510" text-anchor="middle" class="h">3. 符号链接边界</text>
+  <text x="651" y="536" text-anchor="middle" class="small">EvalSymlinks</text>
+  <text x="651" y="558" text-anchor="middle" class="small">再次检查真实目标</text>
+
+  <rect x="780" y="480" width="182" height="98" rx="12" fill="#eef5fb" stroke="#9cbacd"/>
+  <text x="871" y="510" text-anchor="middle" class="h">4. 文件属性</text>
+  <text x="871" y="536" text-anchor="middle" class="small">允许的文本扩展名</text>
+  <text x="871" y="558" text-anchor="middle" class="small">普通文件、≤ 64 KiB</text>
+
+  <rect x="1000" y="480" width="160" height="98" rx="12" fill="#eef5fb" stroke="#9cbacd"/>
+  <text x="1080" y="510" text-anchor="middle" class="h">5. 内容</text>
+  <text x="1080" y="536" text-anchor="middle" class="small">限制读取长度</text>
+  <text x="1080" y="558" text-anchor="middle" class="small">有效 UTF-8</text>
+
+  <line x1="302" y1="529" x2="332" y2="529" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="522" y1="529" x2="552" y2="529" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="742" y1="529" x2="772" y2="529" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="962" y1="529" x2="992" y2="529" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <rect x="150" y="678" width="422" height="82" rx="14" fill="#eef8f0" stroke="#8eb795"/>
+  <text x="361" y="709" text-anchor="middle" class="h">通过：返回文件内容</text>
+  <text x="361" y="736" text-anchor="middle" class="p">ToolMessage → 第二轮模型 → 最终回答</text>
+
+  <rect x="706" y="678" width="422" height="82" rx="14" fill="#fff2f1" stroke="#d29b97"/>
+  <text x="917" y="709" text-anchor="middle" class="h">拒绝：返回可读失败文本 + nil</text>
+  <text x="917" y="736" text-anchor="middle" class="p">模型解释原因并继续会话；Context 取消才返回 Go error</text>
+
+  <path d="M640 624 C590 653 520 679 468 679" fill="none" stroke="#496780" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M640 624 C690 653 760 679 812 679" fill="none" stroke="#b24b4b" stroke-width="2" stroke-dasharray="7 6" marker-end="url(#arrow-red)"/>
+  <text x="552" y="661" class="edge">合法</text>
+  <text x="708" y="661" class="bad">受限或无效</text>
+</svg>

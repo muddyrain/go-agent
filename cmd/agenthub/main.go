@@ -36,9 +36,14 @@ func run() error {
 		return err
 	}
 
-	weatherTool, err := newWeatherTool()
+	projectRoot, err := os.Getwd()
 	if err != nil {
-		return fmt.Errorf("create weather tool: %w", err)
+		return fmt.Errorf("get project root: %w", err)
+	}
+
+	projectFileTool, err := newProjectFileTool(projectRoot)
+	if err != nil {
+		return fmt.Errorf("create project file tool: %w", err)
 	}
 
 	reactAgent, err := react.NewAgent(
@@ -47,7 +52,7 @@ func run() error {
 			ToolCallingModel: chatModel,
 			ToolsConfig: compose.ToolsNodeConfig{
 				Tools: []tool.BaseTool{
-					weatherTool,
+					projectFileTool,
 				},
 			},
 		},
@@ -56,7 +61,15 @@ func run() error {
 		return fmt.Errorf("create ReAct agent: %w", err)
 	}
 
-	history := make([]*schema.Message, 0)
+	history := []*schema.Message{
+		schema.SystemMessage(
+			"你是 AgentHub 项目助手。" +
+				"当用户要求读取、查看、分析或总结项目文件时，" +
+				"必须直接调用 read_project_file 工具，" +
+				"不要在工具调用前输出计划或说明文字。" +
+				"如果回答不依赖项目文件，则直接回答，不要调用工具。",
+		),
+	}
 	reader := bufio.NewReader(os.Stdin)
 
 outer:
