@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">C.5 完整会话历史与模型上下文视图</title>
+  <desc id="desc">展示 AgentHub 保留完整历史，并按最近三个用户轮次生成模型上下文视图。最早轮次被裁剪，但工具调用轮次整体保留。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#55788c"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17232b; }
+      .subtitle { font: 400 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #596873; }
+      .lane { font: 700 20px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #17232b; }
+      .label { font: 600 15px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #243640; }
+      .body { font: 400 14px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #43545e; }
+      .small { font: 400 13px -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", sans-serif; fill: #61717b; }
+      .mono { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #324b59; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="760" fill="#f6f5f0"/>
+  <text x="56" y="58" class="title">C.5 多轮上下文与 Memory</text>
+  <text x="56" y="88" class="subtitle">完整历史是事实来源；模型视图是每轮调用时生成的、可丢弃的派生数据</text>
+
+  <rect x="48" y="120" width="505" height="520" rx="18" fill="#ffffff" stroke="#cfd9df"/>
+  <text x="76" y="158" class="lane">完整会话历史 history</text>
+  <text x="76" y="184" class="small">始终保留全部成功消息，不被上下文裁剪覆盖</text>
+
+  <rect x="76" y="208" width="449" height="48" rx="10" fill="#e9f3f8" stroke="#acc8d8"/>
+  <text x="96" y="238" class="label">System：AgentHub 项目助手规则</text>
+
+  <rect x="76" y="274" width="449" height="76" rx="12" fill="#f5efe4" stroke="#d7bd8e" stroke-dasharray="6 5"/>
+  <text x="96" y="304" class="label">轮次 1：代号是“小海豚”</text>
+  <text x="96" y="330" class="body">User → Assistant　（本轮会被模型视图裁剪）</text>
+
+  <rect x="76" y="366" width="449" height="60" rx="12" fill="#edf6ef" stroke="#aecbb5"/>
+  <text x="96" y="393" class="label">轮次 2：解释 defer</text>
+  <text x="96" y="416" class="body">User → Assistant</text>
+
+  <rect x="76" y="442" width="449" height="60" rx="12" fill="#edf6ef" stroke="#aecbb5"/>
+  <text x="96" y="469" class="label">轮次 3：解释 goroutine</text>
+  <text x="96" y="492" class="body">User → Assistant</text>
+
+  <rect x="76" y="518" width="449" height="94" rx="12" fill="#edf6ef" stroke="#aecbb5"/>
+  <text x="96" y="545" class="label">轮次 4：我的代号是什么？</text>
+  <text x="96" y="570" class="body">User → Assistant ToolCall → ToolMessage</text>
+  <text x="96" y="593" class="body">→ 最终 Assistant（整个工具链属于同一轮）</text>
+
+  <path d="M568 368 C610 368, 610 368, 649 368" fill="none" stroke="#55788c" stroke-width="3" marker-end="url(#arrow)"/>
+  <text x="580" y="341" class="label">BuildModelView</text>
+  <text x="576" y="393" class="small">每次调用前重新生成</text>
+
+  <rect x="662" y="120" width="490" height="520" rx="18" fill="#ffffff" stroke="#b7d0be"/>
+  <text x="690" y="158" class="lane">模型上下文 contextView.Messages</text>
+  <text x="690" y="184" class="small">保留 System + 最近 3 个完整 User 轮次</text>
+
+  <rect x="690" y="208" width="434" height="48" rx="10" fill="#e9f3f8" stroke="#acc8d8"/>
+  <text x="710" y="238" class="label">System：仍然保留</text>
+
+  <rect x="690" y="274" width="434" height="56" rx="10" fill="#f2f2ef" stroke="#c9c8c0"/>
+  <text x="710" y="298" class="label">轮次 1：不发送给模型</text>
+  <text x="710" y="319" class="small">完整 history 中仍然存在</text>
+
+  <rect x="690" y="346" width="434" height="60" rx="12" fill="#edf6ef" stroke="#aecbb5"/>
+  <text x="710" y="373" class="label">轮次 2：User → Assistant</text>
+  <text x="710" y="396" class="small">完整保留</text>
+
+  <rect x="690" y="422" width="434" height="60" rx="12" fill="#edf6ef" stroke="#aecbb5"/>
+  <text x="710" y="449" class="label">轮次 3：User → Assistant</text>
+  <text x="710" y="472" class="small">完整保留</text>
+
+  <rect x="690" y="498" width="434" height="114" rx="12" fill="#edf6ef" stroke="#79a88b" stroke-width="2"/>
+  <text x="710" y="525" class="label">轮次 4：工具协议整体保留</text>
+  <text x="710" y="550" class="body">User → Assistant ToolCall</text>
+  <text x="710" y="574" class="body">→ ToolMessage → 最终 Assistant</text>
+  <text x="710" y="598" class="small">禁止从 ToolMessage 或 Assistant 中间开始裁剪</text>
+
+  <rect x="48" y="666" width="1104" height="58" rx="12" fill="#eaf2f5" stroke="#bed0d8"/>
+  <text x="72" y="691" class="mono">history=8　 model=6　 dropped=2　 turns=3</text>
+  <text x="72" y="713" class="body">裁剪只影响本轮模型可见范围；不能执行 history = contextView.Messages，否则永久丢失完整会话事实。</text>
+</svg>

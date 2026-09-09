@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agenthub/internal/session"
 	"bufio"
 	"context"
 	"errors"
@@ -18,6 +19,8 @@ import (
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
 )
+
+const maxContextTurns = 3
 
 func main() {
 	if err := run(); err != nil {
@@ -70,6 +73,10 @@ func run() error {
 				"如果回答不依赖项目文件，则直接回答，不要调用工具。",
 		),
 	}
+	contextWindow, err := session.NewContextWindow(maxContextTurns)
+	if err != nil {
+		return fmt.Errorf("create context window: %w", err)
+	}
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
@@ -94,11 +101,22 @@ func run() error {
 		userMessage := schema.UserMessage(input)
 		history = append(history, userMessage)
 
+		contextView := contextWindow.BuildModelView(history)
+
+		fmt.Printf(
+			"context: history=%d model=%d dropped=%d turns=%d reason=%s\n",
+			contextView.TotalMessages,
+			contextView.KeptMessages,
+			contextView.DroppedMessages,
+			contextView.KeptTurns,
+			contextView.Reason,
+		)
+
 		msgOpt, future := react.WithMessageFuture()
 
 		stream, err := reactAgent.Stream(
 			ctx,
-			history,
+			contextView.Messages,
 			msgOpt,
 			agent.WithComposeOptions(
 				compose.WithCallbacks(newLifecycleCallback()),

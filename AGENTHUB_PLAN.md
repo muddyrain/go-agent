@@ -150,7 +150,7 @@ usage: input=0 output=0 total=0
 | Message / Model 协议 | 已实现 | 正式入口已使用 OpenAI 兼容真实模型完成工具调用与流式回答；教学实现保留在 `examples/` | Phase C 继续加入交互式多轮输入 |
 | Tool / Registry / Executor | 已实现 | 自研天气工具与 Eino Tool/ToolsNode 均已进入入口，职责映射已完成 | Phase D 接真实 MCP |
 | Agent Loop | 已实现 | 自研 Loop 与 Eino ReAct Agent 都已完成闭环；正式入口已收敛到 Eino，自研实现归档为学习对照 | Phase C 接真实模型并继续演进正式入口 |
-| Memory | 已实现 | 已进入入口，但尚未观察裁剪效果；已识别按单消息裁剪可能拆散 ToolCall/ToolMessage | 在多轮 CLI 中展示并修复协议裁剪风险 |
+| Memory | 已实现 | 正式入口维护完整会话历史，并为每轮模型调用生成最近 3 个完整用户轮次的上下文视图；裁剪统计可见，工具调用链不会被拆散 | Phase F 持久化时区分会话历史、上下文策略和长期记忆 |
 | Streaming | 已实现 | 正式入口已消费 OpenAI 兼容服务的真实增量流；教学 Pipe 对照保留在历史示例中 | Phase E 映射为 SSE 事件 |
 | Agent Factory | 已实现 | 已用于入口组装；两种 Memory 策略有价值，但存在阅读跳转成本 | Eino 对照时重新判断是否保留或简化 |
 | MCP Session / Adapter / Manager | 已实现协议边界 | 无真实传输，未进入入口 | 延后到本地工具链跑通后再接回 |
@@ -168,7 +168,7 @@ usage: input=0 output=0 total=0
 |---|---|---|---|---|
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
-| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 进行中：C.1—C.4 已掌握 |
+| Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 待开始 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.4 已掌握**
+- 当前阶段：**Phase C：可用 CLI Agent，C.1—C.5 已掌握，阶段已完成**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.4**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -309,14 +309,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - C.4 可见结果：真实模型回答完成后打印 52 个 Chunk 并重新出现输入提示符，普通知识问答未调用项目文件工具
 - C.4 理解验收：能说明 EOF 是完整成功边界；流由唯一消费者关闭，历史回滚由掌握会话状态的 `run` 负责
 - C.4 生命周期图：[`docs/images/c4-stream-lifecycle.svg`](docs/images/c4-stream-lifecycle.svg)
+- C.5 上下文窗口：新增 `internal/session.ContextWindow`，完整 `history` 保留全部成功消息，每轮从中派生只含第一条 SystemMessage 与最近 3 个完整用户轮次的模型视图
+- C.5 轮次边界：以 UserMessage 作为裁剪起点，User 之后直到下一个 User 之前的 Assistant ToolCall、ToolMessage 和最终 AssistantMessage 作为整体保留，避免形成孤立工具消息
+- C.5 可见结果：第四轮提问时终端显示 `history=8 model=6 dropped=2 turns=3`；最早的代号问答仍在完整历史中，但不再发送给模型，因此模型无法从当前上下文回答代号
+- C.5 最小测试：保护非法窗口参数、SystemMessage 永久保留、最近轮次选择、工具调用链完整性及原始 history 不被缩短
+- C.5 职责边界：`ContextWindow` 负责无副作用地构建派生视图，`run` 继续拥有完整历史并决定何时追加或回滚；当前按轮次数裁剪，不实现 Token 预算、摘要或长期记忆
+- C.5 理解验收：能说明不能用裁剪视图覆盖完整 history，并能解释按最后 N 条消息裁剪会破坏对话起点和 Assistant ToolCall → ToolMessage 协议关联
+- C.5 上下文图：[`docs/images/c5-context-window.svg`](docs/images/c5-context-window.svg)
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**C.5 多轮上下文与 Memory**
-- 下一节只做：区分完整会话历史与发送给模型的上下文视图，观察裁剪原因，并保证 ToolCall 与 ToolMessage 不被拆散
-- 下一节明确不做：持久化、多用户、HTTP/SSE、MCP、RAG、Web 页面或新的 Runtime 抽象
+- 下一节：**Phase C 收口：整理历史自研 Runtime 的教学边界**
+- 下一节只做：把生产主线与历史教学实现的目录和依赖边界整理清楚，确保 `cmd/agenthub` 不依赖旧 Runtime，保留仍有教学价值的可运行对照
+- 下一节明确不做：新增 Agent 功能、真实 MCP 连接、HTTP/SSE、持久化、RAG 或大规模生产架构设计
 
 ## 9. 下一节理解验收题
 
-C.5 仍只进行一轮集中验收，聚焦两个结论：为什么完整会话历史不应等同于每次发给模型的上下文视图；为什么裁剪必须以完整对话单元为边界，不能拆散 Assistant ToolCall 与 ToolMessage。
+Phase C 收口只进行一轮集中验收，聚焦两个结论：为什么历史教学实现不能继续占用生产包边界；为什么目录迁移或删除前必须先确认正式入口依赖和教学示例仍可独立运行。
 
 ## 10. 历史路线处理
 
