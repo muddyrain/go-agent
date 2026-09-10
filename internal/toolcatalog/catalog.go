@@ -19,12 +19,14 @@ const (
 type Entry struct {
 	Tool    tool.BaseTool
 	Source  Source
+	Server  string
 	Enabled bool
 }
 
 type Item struct {
 	Name        string
 	Source      Source
+	Server      string
 	Enabled     bool
 	Description string
 	Parameters  string
@@ -108,6 +110,7 @@ func (c *Catalog) List(ctx context.Context) ([]Item, error) {
 		items = append(items, Item{
 			Name:        info.Name,
 			Source:      entry.Source,
+			Server:      entry.Server,
 			Enabled:     entry.Enabled,
 			Description: info.Desc,
 			Parameters:  parameters,

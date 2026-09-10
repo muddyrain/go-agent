@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub D.3 多 MCP Server 与命名空间调用链</title>
+  <desc id="desc">展示 AgentHub 通过 Manager 管理 calculator 和 accounting 两个 Session，将模型侧命名空间工具名转发为 MCP Server 原始工具名，并在部分启动失败时清理已建立 Session。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#3c6478"/>
+    </marker>
+    <style>
+      .title{font:700 28px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#18323f}
+      .subtitle{font:400 15px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#607680}
+      .lane{font:700 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#264653}
+      .head{font:700 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#18323f}
+      .body{font:400 14px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#314b57}
+      .small{font:400 13px -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",sans-serif;fill:#607680}
+      .mono{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#18323f}
+      .box{fill:#fff;stroke:#cbd8de;stroke-width:1.5}
+      .manager{fill:#edf7fb;stroke:#68a8c3;stroke-width:2}
+      .proxy{fill:#f4faf5;stroke:#76ad86;stroke-width:1.8}
+      .serverA{fill:#fff7e8;stroke:#d7a548;stroke-width:1.8}
+      .serverB{fill:#fff2ef;stroke:#d98773;stroke-width:1.8}
+      .warn{fill:#fff5f4;stroke:#d97870;stroke-width:1.6}
+      .line{stroke:#3c6478;stroke-width:2;fill:none;marker-end:url(#arrow)}
+      .dash{stroke:#8a9ca4;stroke-width:1.7;stroke-dasharray:7 6;fill:none;marker-end:url(#arrow)}
+    </style>
+  </defs>
+
+  <rect width="1280" height="760" fill="#f7f8f5"/>
+  <text x="54" y="52" class="title">D.3 多 MCP Server：本地唯一名，远程原始名</text>
+  <text x="54" y="80" class="subtitle">命名空间解决模型与 ToolsNode 的路由冲突；MCP 协议调用仍使用每个 Server 已注册的原始工具名</text>
+
+  <rect x="40" y="108" width="1200" height="420" rx="18" fill="#ffffff" stroke="#d7e0e4"/>
+  <text x="68" y="142" class="lane">正常调用链</text>
+
+  <rect x="70" y="176" width="190" height="102" rx="14" class="box"/>
+  <text x="165" y="210" text-anchor="middle" class="head">ChatModel</text>
+  <text x="165" y="237" text-anchor="middle" class="body">生成唯一 ToolCall</text>
+  <text x="165" y="259" text-anchor="middle" class="small">模型只认本地名称</text>
+
+  <rect x="322" y="164" width="232" height="126" rx="14" class="box"/>
+  <text x="438" y="197" text-anchor="middle" class="head">Eino ToolsNode</text>
+  <text x="438" y="225" text-anchor="middle" class="mono">map[toolName]executor</text>
+  <text x="438" y="253" text-anchor="middle" class="body">名称必须唯一</text>
+  <text x="438" y="274" text-anchor="middle" class="small">同名时后加入者覆盖前者</text>
+
+  <rect x="616" y="148" width="250" height="158" rx="15" class="manager"/>
+  <text x="741" y="181" text-anchor="middle" class="head">mcpclient.Manager</text>
+  <text x="741" y="209" text-anchor="middle" class="body">ServerConfig → 多个 Session</text>
+  <text x="741" y="234" text-anchor="middle" class="body">发现工具 → 命名空间包装</text>
+  <text x="741" y="259" text-anchor="middle" class="body">统一保存 → 倒序关闭</text>
+  <text x="741" y="284" text-anchor="middle" class="small">一份 Server 配置对应一个 Session</text>
+
+  <path d="M260 227 H322" class="line"/>
+  <path d="M554 227 H616" class="line"/>
+
+  <rect x="934" y="126" width="268" height="174" rx="15" class="serverA"/>
+  <text x="1068" y="158" text-anchor="middle" class="head">calculator Session / Server</text>
+  <text x="1068" y="189" text-anchor="middle" class="mono">calculator__add_numbers</text>
+  <text x="1068" y="214" text-anchor="middle" class="small">Info()：模型侧唯一名</text>
+  <path d="M971 232 H1165" stroke="#d7a548" stroke-width="1"/>
+  <text x="1068" y="258" text-anchor="middle" class="mono">tools/call: add_numbers</text>
+  <text x="1068" y="281" text-anchor="middle" class="small">InvokableRun()：委托原 Adapter</text>
+
+  <rect x="934" y="326" width="268" height="174" rx="15" class="serverB"/>
+  <text x="1068" y="358" text-anchor="middle" class="head">accounting Session / Server</text>
+  <text x="1068" y="389" text-anchor="middle" class="mono">accounting__add_numbers</text>
+  <text x="1068" y="414" text-anchor="middle" class="small">Info()：模型侧唯一名</text>
+  <path d="M971 432 H1165" stroke="#d98773" stroke-width="1"/>
+  <text x="1068" y="458" text-anchor="middle" class="mono">tools/call: add_numbers</text>
+  <text x="1068" y="481" text-anchor="middle" class="small">InvokableRun()：委托原 Adapter</text>
+
+  <path d="M866 205 C900 205 900 213 934 213" class="line"/>
+  <path d="M866 253 C903 253 900 413 934 413" class="line"/>
+
+  <rect x="70" y="336" width="776" height="146" rx="14" class="proxy"/>
+  <text x="92" y="370" class="head">命名空间代理的关键边界</text>
+  <text x="92" y="403" class="body">① Info() 返回副本：把远程 add_numbers 暴露为 server__add_numbers</text>
+  <text x="92" y="432" class="body">② InvokableRun() 不重写远程名：调用原 MCP Adapter，由它发送 tools/call</text>
+  <text x="92" y="461" class="body">③ 两个 Server 都能继续注册相同的原始名，模型侧路由仍保持唯一和可读</text>
+
+  <rect x="40" y="552" width="1200" height="162" rx="18" fill="#ffffff" stroke="#d7e0e4"/>
+  <text x="68" y="586" class="lane">部分启动失败时的资源清理</text>
+
+  <rect x="72" y="615" width="214" height="68" rx="12" class="serverA"/>
+  <text x="179" y="642" text-anchor="middle" class="head">calculator 已启动</text>
+  <text x="179" y="666" text-anchor="middle" class="small">子进程、管道、Client 存活</text>
+
+  <rect x="362" y="615" width="214" height="68" rx="12" class="warn"/>
+  <text x="469" y="642" text-anchor="middle" class="head">accounting 启动失败</text>
+  <text x="469" y="666" text-anchor="middle" class="small">产生原始连接错误</text>
+
+  <rect x="650" y="615" width="214" height="68" rx="12" class="manager"/>
+  <text x="757" y="642" text-anchor="middle" class="head">manager.Close()</text>
+  <text x="757" y="666" text-anchor="middle" class="small">回收已建立 Session</text>
+
+  <rect x="938" y="615" width="264" height="68" rx="12" class="box"/>
+  <text x="1070" y="642" text-anchor="middle" class="head">errors.Join</text>
+  <text x="1070" y="666" text-anchor="middle" class="small">同时保留主错误与清理错误</text>
+
+  <path d="M286 649 H362" class="dash"/>
+  <path d="M576 649 H650" class="line"/>
+  <path d="M864 649 H938" class="line"/>
+
+  <text x="54" y="741" class="small">示意：基于 D.3 当前实现；不包含 D.4 才处理的超时、断线恢复和状态管理。</text>
+</svg>

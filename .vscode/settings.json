@@ -12,6 +12,7 @@
     "mcpadapter",
     "mcpclient",
     "mcpserver",
+    "namespaced",
     "santhosh",
     "toolcatalog",
     "toolutils"

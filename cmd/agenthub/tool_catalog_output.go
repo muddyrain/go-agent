@@ -33,12 +33,24 @@ func printToolCatalog(
 			&output,
 			"- name: %s\n"+
 				"  source: %s\n"+
-				"  status: %s\n"+
-				"  description: %s\n"+
-				"  parameters: %s\n",
+				"  status: %s\n",
 			item.Name,
 			item.Source,
 			status,
+		)
+
+		if item.Server != "" {
+			fmt.Fprintf(
+				&output,
+				"  server: %s\n",
+				item.Server,
+			)
+		}
+
+		fmt.Fprintf(
+			&output,
+			"  description: %s\n"+
+				"  parameters: %s\n",
 			item.Description,
 			item.Parameters,
 		)

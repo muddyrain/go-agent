@@ -29,7 +29,11 @@ const (
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == mcpServerMode {
-		if err := mcpserver.ServeStdio(); err != nil {
+		if len(os.Args) < 3 {
+			log.Fatal("MCP server ID is required")
+		}
+
+		if err := mcpserver.ServeStdio(os.Args[2]); err != nil {
 			log.Fatal(err)
 		}
 		return
@@ -65,19 +69,38 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("get AgentHub executable: %w", err)
 	}
-	mcpSession, err := mcpclient.OpenStdio(
+
+	mcpManager, err := mcpclient.OpenServers(
 		ctx,
-		executable,
-		mcpServerMode,
+		[]mcpclient.ServerConfig{
+			{
+				Name:    mcpserver.ServerCalculator,
+				Command: executable,
+				Args: []string{
+					mcpServerMode,
+					mcpserver.ServerCalculator,
+				},
+			},
+			{
+				Name:    mcpserver.ServerAccounting,
+				Command: executable,
+				Args: []string{
+					mcpServerMode,
+					mcpserver.ServerAccounting,
+				},
+			},
+		},
 	)
 	if err != nil {
-		return fmt.Errorf("open MCP session: %w", err)
+		return fmt.Errorf("open MCP servers: %w", err)
 	}
+
 	defer func() {
-		if err := mcpSession.Close(); err != nil {
-			log.Printf("close MCP session: %v", err)
+		if err := mcpManager.Close(); err != nil {
+			log.Printf("close MCP servers: %v", err)
 		}
 	}()
+
 	entries := []toolcatalog.Entry{
 		{
 			Tool:    projectFileTool,
@@ -85,13 +108,19 @@ func run() error {
 			Enabled: true,
 		},
 	}
-	for _, mcpTool := range mcpSession.Tools() {
-		entries = append(entries, toolcatalog.Entry{
-			Tool:    mcpTool,
-			Source:  toolcatalog.SourceMCP,
-			Enabled: true,
-		})
+
+	for _, discovered := range mcpManager.Tools() {
+		entries = append(
+			entries,
+			toolcatalog.Entry{
+				Tool:    discovered.Tool,
+				Source:  toolcatalog.SourceMCP,
+				Server:  discovered.Server,
+				Enabled: true,
+			},
+		)
 	}
+
 	toolCatalog, err := toolcatalog.New(entries...)
 	if err != nil {
 		return fmt.Errorf("create tool catalog: %w", err)

@@ -46,6 +46,7 @@ func TestCatalogListsAllEntriesAndFiltersEnabledTools(t *testing.T) {
 		Entry{
 			Tool:    disabledMCPTool,
 			Source:  SourceMCP,
+			Server:  "search",
 			Enabled: false,
 		},
 	)
@@ -78,6 +79,7 @@ func TestCatalogListsAllEntriesAndFiltersEnabledTools(t *testing.T) {
 	}
 	if items[1].Name != "remote_search" ||
 		items[1].Source != SourceMCP ||
+		items[1].Server != "search" ||
 		items[1].Enabled {
 		t.Fatalf("List() second item = %+v, want disabled MCP tool", items[1])
 	}

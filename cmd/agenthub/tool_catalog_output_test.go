@@ -14,15 +14,16 @@ type catalogOutputTestTool struct{}
 
 func (*catalogOutputTestTool) Info(context.Context) (*schema.ToolInfo, error) {
 	return &schema.ToolInfo{
-		Name: "read_project_file",
-		Desc: "读取项目文件",
+		Name: "calculator__add_numbers",
+		Desc: "计算两个普通数字的和",
 	}, nil
 }
 
-func TestPrintToolCatalogShowsSourceAndStatus(t *testing.T) {
+func TestPrintToolCatalogShowsSourceServerAndStatus(t *testing.T) {
 	catalog, err := toolcatalog.New(toolcatalog.Entry{
 		Tool:    &catalogOutputTestTool{},
-		Source:  toolcatalog.SourceLocal,
+		Source:  toolcatalog.SourceMCP,
+		Server:  "calculator",
 		Enabled: false,
 	})
 	if err != nil {
@@ -36,10 +37,11 @@ func TestPrintToolCatalogShowsSourceAndStatus(t *testing.T) {
 
 	for _, want := range []string{
 		"tools: 1",
-		"name: read_project_file",
-		"source: local",
+		"name: calculator__add_numbers",
+		"source: mcp",
+		"server: calculator",
 		"status: disabled",
-		"description: 读取项目文件",
+		"description: 计算两个普通数字的和",
 		"parameters: {}",
 	} {
 		if !strings.Contains(output.String(), want) {

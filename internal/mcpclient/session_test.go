@@ -23,6 +23,7 @@ func TestOpenStdioDiscoversAndCallsTool(t *testing.T) {
 		"-test.run=TestMCPServerProcess",
 		"--",
 		"mcp-server",
+		mcpserver.ServerCalculator,
 	)
 	if err != nil {
 		t.Fatalf("OpenStdio() error = %v", err)
@@ -78,11 +79,14 @@ func TestOpenStdioFailsWhenServerExitsBeforeInitialize(t *testing.T) {
 }
 
 func TestMCPServerProcess(t *testing.T) {
-	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "mcp-server" {
-		return
-	}
+	for index, arg := range os.Args {
+		if arg != "mcp-server" || index+1 >= len(os.Args) {
+			continue
+		}
 
-	if err := mcpserver.ServeStdio(); err != nil {
-		t.Fatal(err)
+		if err := mcpserver.ServeStdio(os.Args[index+1]); err != nil {
+			t.Fatal(err)
+		}
+		return
 	}
 }
