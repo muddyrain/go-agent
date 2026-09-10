@@ -169,7 +169,7 @@ usage: input=0 output=0 total=0
 | Phase A：恢复可见主线 | 已有零件没有进入应用入口 | 终端跑通并解释一次 Model—Tool—Model 闭环 | 使用现有自研内核学习原理 | 已完成 |
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
-| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 进行中：D.1—D.3 已掌握 |
+| Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 进行中：D.1—D.3 已掌握，D.4 第一阶段已实现 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 待开始 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
@@ -236,7 +236,7 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase D：工具中心与 MCP，D.1—D.3 已掌握**
+- 当前阶段：**Phase D：工具中心与 MCP；D.1—D.3 已掌握，D.4 第一阶段已实现**
 - 路线蓝图：**已明确最终产品形态、Eino 切换边界、Phase A—I 交付与验收标准**
 - 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
@@ -344,9 +344,13 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - D.3 可见结果：`/tools` 展示 3 个唯一工具；模型分别调用两个命名空间工具，Callback 显示对应名称，结果分别为 `[calculator] 17 + 25 = 42` 与 `[accounting] 10.5 + 20.5 = 31`
 - D.3 理解验收：能说明命名空间只改变模型侧路由名、远程调用仍使用原始名；能区分单连接 Session 与多 Server Manager，并理解部分启动失败时必须回收已创建资源。集中纠正了 Manager 不是“同一 Server 多 Client”管理器，以及 `errors.Join` 同时保留主错误和清理错误
 - D.3 调用链：[`docs/images/d3-multi-mcp-namespace-flow.svg`](docs/images/d3-multi-mcp-namespace-flow.svg)
+- D.4 第一阶段：`internal/mcpclient.Session` 新增 `ready`、`unavailable`、`closed` 状态，以 `sync.RWMutex` 保护并发读写；`Close()` 使用 `sync.Once` 保证底层 Client 最多关闭一次，并稳定返回首次关闭结果
+- D.4 状态语义：只有 Initialize 与工具发现全部成功才返回 `ready` Session；开始关闭时先切换到 `closed`，终止状态不会再退回 `unavailable`；连接层后续可通过 `ensureReady` 与 `markUnavailable` 统一检查和记录状态
+- 生产主线注释复盘：已覆盖应用入口与 ReAct 消息链、完整 history 与上下文视图、Tool Catalog、MCP Session/Manager/命名空间代理、stdio Server、本地文件工具、`.env` 和真实模型配置，重点记录职责边界、状态与资源生命周期、安全约束和错误归属，不逐行翻译明显代码
+- 复盘验证：`go test ./...`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过；D.4 仍处于进行中，尚未实现连接握手超时、有限重试和工具调用超时分类
 - 暂停项：**原 1.7.4 MCP 超时、关闭、断线与重连**
-- 下一节：**D.4 生命周期与稳定性**
-- 下一节只做：在当前真实多 Server 连接上观察超时、Server 断开和关闭，再实现有限的状态、错误传播与优雅关闭策略
+- 下一节：**D.4 第二阶段：连接握手超时与有限重试**
+- 下一节只做：为当前真实 stdio MCP 连接增加有边界的握手超时和仅适用于连接建立阶段的有限重试，保持 ToolCall 默认不自动重试
 - 下一节明确不做：HTTP/SSE、持久化、RAG、Web 页面或大规模配置系统
 
 ## 9. 下一节理解验收题
