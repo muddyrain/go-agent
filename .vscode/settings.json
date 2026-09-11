@@ -6,6 +6,7 @@
     "cloudwego",
     "Eino",
     "godotenv",
+    "httpapi",
     "Invokable",
     "jsonschema",
     "mapstructure",
@@ -13,6 +14,7 @@
     "mcpclient",
     "mcpserver",
     "namespaced",
+    "projecttool",
     "santhosh",
     "toolcatalog",
     "toolutils"

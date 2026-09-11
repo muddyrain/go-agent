@@ -1,4 +1,4 @@
-package main
+package cli
 
 import (
 	"bytes"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"agenthub/internal/toolcatalog"
+
 	"github.com/cloudwego/eino/schema"
 )
 

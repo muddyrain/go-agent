@@ -44,7 +44,7 @@ usage: input=0 output=0 total=0
 
 当前仍没有：
 
-- HTTP 服务、聊天接口或 SSE 输出；
+- SSE 流式 HTTP 输出或 Web Playground；
 - MCP 自动重连、断线恢复和产品化诊断；
 - 持久化的会话与多用户隔离；
 - RAG、Web Playground 或 Multi-Agent。
@@ -154,7 +154,7 @@ usage: input=0 output=0 total=0
 | Streaming | 已实现 | 正式入口已消费 OpenAI 兼容服务的真实增量流；教学 Pipe 对照保留在历史示例中 | Phase E 映射为 SSE 事件 |
 | Agent Factory | 教学实现已归档 | 自研 Factory 仅由 `examples/selfbuilt-runtime` 使用；正式入口直接组装 Eino ReAct Agent | 出现真实重复后再提取生产组装边界 |
 | MCP Session / Adapter / Manager | 多 Server 已实现 | 正式入口通过可读配置启动两个 stdio MCP Server；每个 Server 对应一个 Session，Manager 统一发现、命名空间包装和关闭工具连接 | D.4 在真实连接上处理生命周期与稳定性 |
-| HTTP / SSE | 未实现 | 不可见 | 在 CLI Agent 稳定后推进 |
+| HTTP / SSE | 最小 HTTP `/chat` 已实现 | `go run ./cmd/agenthub serve` 提供 `POST /chat`，可调用同一 Eino ReAct Agent 与 MCP 工具；SSE 尚未实现 | E.2 以 Hertz + SSE 同时带来框架能力与流式可见效果 |
 | 持久化 | 未实现 | 不可见 | 由“重启后会话丢失”这个问题驱动 |
 | RAG / Workflow / Multi-Agent | 未实现 | 不可见 | 由具体用户场景驱动 |
 
@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 下一阶段：从 E.1 最小 HTTP `/chat` 开始 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1 已掌握，下一节 E.2 Hertz + SSE |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase D 暂停扩展；准备进入 Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**D.4 第二阶段与 D.5 延后；只有出现真实 MCP 故障或阻塞产品能力时再补。下一节直接实现 E.1 最小 HTTP `/chat`，让 AgentHub 首次可被终端之外的调用方使用**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3**
+- 当前阶段：**Phase E：HTTP 与 Web Playground**
+- 当前路线决策：**E.1 已完成；下一节 E.2 引入 CloudWeGo Hertz，并新增 SSE 流式聊天。框架迁移必须与用户可见能力一起发生，不安排只有框架替换的课程。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -349,13 +349,20 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - 生产主线注释复盘：已覆盖应用入口与 ReAct 消息链、完整 history 与上下文视图、Tool Catalog、MCP Session/Manager/命名空间代理、stdio Server、本地文件工具、`.env` 和真实模型配置，重点记录职责边界、状态与资源生命周期、安全约束和错误归属，不逐行翻译明显代码
 - 复盘验证：`go test ./...`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过；D.4 仍处于进行中，尚未实现连接握手超时、有限重试和工具调用超时分类
 - 暂停项：**D.4 第二阶段（连接握手超时与有限重试）和 D.5（MCP 配置与诊断）**。它们在当前本地教学 Server 的正常路径上没有新的用户可见效果，且尚未由真实故障驱动；保留 D.4 第一阶段已有的 Session 状态与幂等关闭能力。
-- 下一节：**E.1 最小 HTTP `/chat` 接口**
-- 下一节只做：让终端之外的调用方通过 HTTP 提交一条消息并获得 Agent 最终回答；以 CLI 与 HTTP 的真实重复为依据，提取最小共享应用用例。
-- 下一节明确不做：SSE、Web 页面、持久化、RAG、自动重连、复杂配置系统，以及没有真实调用方的预留抽象。
+- E.1 入口边界：`cmd/agenthub` 只组装模型、本地工具、MCP Manager、Catalog 与 Eino ReAct Agent，再根据参数选择 `internal/cli` 或 `internal/httpapi`；完整 CLI 会话迁入 `internal/cli`，项目文件工具迁入 `internal/projecttool`
+- E.1 HTTP 协议：`go run ./cmd/agenthub serve` 在 `127.0.0.1:8080` 提供 `POST /chat`，接收 `{"message":"..."}` 并返回 `{"answer":"..."}`；非法 JSON、空消息返回 400，Agent 执行失败返回 502
+- E.1 可见结果：真实 HTTP 请求调用 `calculator__add_numbers` 计算 17 + 25，返回 HTTP 200 与答案 42；原 CLI `/tools`、流式问答和退出行为保持不变
+- E.1 Context 边界：Handler 将 `request.Context()` 传给 Agent，使客户端断开、请求取消或上游超时能够取消后续模型与工具链路；`context.Background()` 不携带该请求生命周期
+- E.1 测试接缝：`internal/httpapi` 用仅包含 `Generate` 的最小接口隔离真实模型，保护成功响应、非法 JSON、空消息、Agent 错误、nil 消息以及请求 Context 和消息输入；该接口只解决当前 Handler 的外部依赖测试问题
+- E.1 验证：用户已真实运行 CLI 与 HTTP 成功路径；`go test ./...`、`go vet ./...`、`go build ./...` 和 `git diff --check` 全部通过
+- E.1 理解验收：能说明 `cmd/agenthub` 是组合入口，CLI 与 HTTP 是不同适配层，`internal/httpapi` 不应知道 MCP Server 启动细节；集中校正 `request.Context()` 的核心价值是传播请求取消，而不只是表示单次请求
+- 下一节：**E.2 CloudWeGo Hertz + SSE 流式聊天**
+- 下一节只做：在保留 `/chat` 行为的同时迁入 Hertz，并新增客户端可实时观察的流式回答；用真实路由和流式需求证明框架价值
+- 下一节明确不做：持久化、RAG、完整认证体系，以及没有现存重复支撑的通用 Runtime、Repository 或 Controller 层
 
 ## 9. 下一节理解验收题
 
-D.3 的集中理解验收已通过：学习者能够说明模型侧唯一命名空间与远程原始工具名的区别、Session 与 Manager 的职责边界，以及部分启动失败时关闭已建立 Session 的必要性；对 `errors.Join` 的错误聚合语义已集中补充。
+E.1 的集中理解验收已通过：学习者能够说明组合入口、CLI/HTTP 适配层和 MCP 细节之间的职责边界；对 `request.Context()` 向模型与工具链传播客户端取消、请求取消或超时的语义已集中补充。
 
 ## 10. 历史路线处理
 

@@ -1,4 +1,4 @@
-package main
+package projecttool
 
 import (
 	"context"
@@ -35,10 +35,10 @@ type readProjectFileArguments struct {
 	Path string `json:"path" jsonschema:"required,description=相对于项目根目录的文本文件路径"`
 }
 
-// newProjectFileTool 创建受项目根目录约束的本地只读工具。
+// New 创建受项目根目录约束的本地只读工具。
 // 路径校验和文件读取留在普通 Go 函数中，便于独立测试安全规则，而不是
 // 把所有逻辑塞进 Eino Tool Handler。
-func newProjectFileTool(projectRoot string) (tool.InvokableTool, error) {
+func New(projectRoot string) (tool.InvokableTool, error) {
 	return toolutils.InferTool(
 		"read_project_file",
 		"读取、查看、分析或总结 AgentHub 项目文件时使用；path 必须是相对于项目根目录的文本文件路径；禁止读取 .env；单个文件不能超过 64 KiB",

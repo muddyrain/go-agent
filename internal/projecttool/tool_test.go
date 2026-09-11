@@ -1,4 +1,4 @@
-package main
+package projecttool
 
 import (
 	"os"
@@ -19,9 +19,9 @@ func TestProjectFileToolReadsTextFile(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
-	projectFileTool, err := newProjectFileTool(root)
+	projectFileTool, err := New(root)
 	if err != nil {
-		t.Fatalf("newProjectFileTool() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 
 	result, err := projectFileTool.InvokableRun(
@@ -42,9 +42,9 @@ func TestProjectFileToolReadsTextFile(t *testing.T) {
 func TestProjectFileToolReturnsReadableFailure(t *testing.T) {
 	root := t.TempDir()
 
-	projectFileTool, err := newProjectFileTool(root)
+	projectFileTool, err := New(root)
 	if err != nil {
-		t.Fatalf("newProjectFileTool() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 
 	tests := []struct {
@@ -101,9 +101,9 @@ func TestProjectFileToolRejectsSymlinkEscape(t *testing.T) {
 		t.Skipf("create symlink: %v", err)
 	}
 
-	projectFileTool, err := newProjectFileTool(root)
+	projectFileTool, err := New(root)
 	if err != nil {
-		t.Fatalf("newProjectFileTool() error = %v", err)
+		t.Fatalf("New() error = %v", err)
 	}
 
 	result, err := projectFileTool.InvokableRun(
