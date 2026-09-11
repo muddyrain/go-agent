@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1040" viewBox="0 0 1600 1040" role="img" aria-labelledby="title desc">
+  <title id="title">AgentHub 当前架构热路径与 D.4 连接策略</title>
+  <desc id="desc">上半部分区分启动期、对话期和历史教学代码；下半部分展示连接握手超时与有限重试流程，并强调工具调用默认不自动重试。</desc>
+  <defs>
+    <style>
+      .bg { fill:#f7f8fa; }
+      .panel { fill:#ffffff; stroke:#d8dee8; stroke-width:2; rx:22; }
+      .title { font:700 34px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#172033; }
+      .subtitle { font:600 23px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#263248; }
+      .label { font:600 19px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#1f2a3d; }
+      .body { font:400 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#4b5870; }
+      .small { font:400 14px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#5b667a; }
+      .hot { fill:#eaf3ff; stroke:#3d7edb; stroke-width:2; rx:16; }
+      .support { fill:#edf8f1; stroke:#3f9465; stroke-width:2; rx:16; }
+      .boundary { fill:#fff6e8; stroke:#d98b2b; stroke-width:2; rx:16; }
+      .archive { fill:#f1f3f6; stroke:#9aa4b3; stroke-width:2; stroke-dasharray:8 7; rx:16; }
+      .danger { fill:#fff0f0; stroke:#cf4b4b; stroke-width:2; rx:16; }
+      .line { fill:none; stroke:#52627a; stroke-width:3; marker-end:url(#arrow); }
+      .lineBlue { fill:none; stroke:#3d7edb; stroke-width:3; marker-end:url(#arrowBlue); }
+      .lineOrange { fill:none; stroke:#d98b2b; stroke-width:3; marker-end:url(#arrowOrange); }
+      .lineDash { fill:none; stroke:#7d899c; stroke-width:2.5; stroke-dasharray:8 7; marker-end:url(#arrow); }
+      .tag { font:600 14px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#ffffff; }
+      .note { font:600 16px -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; fill:#b23d3d; }
+    </style>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#52627a"/></marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#3d7edb"/></marker>
+    <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#d98b2b"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1600" height="1040"/>
+  <text class="title" x="70" y="62">AgentHub：代码看起来多，但要按“发生时间”读</text>
+  <text class="body" x="70" y="94">示意：封装不是一条请求每次都逐层经过；启动、对话、关闭是三条不同路径。</text>
+
+  <rect class="panel" x="55" y="125" width="1490" height="475"/>
+  <text class="subtitle" x="85" y="165">一、当前生产主线：两条热路径 + 一块归档区</text>
+
+  <rect x="85" y="190" width="92" height="30" rx="15" fill="#3d7edb"/>
+  <text class="tag" x="108" y="211">启动期</text>
+  <rect class="hot" x="85" y="240" width="210" height="92"/>
+  <text class="label" x="115" y="275">cmd/agenthub</text>
+  <text class="small" x="115" y="303">决定启动哪些 Server</text>
+
+  <rect class="hot" x="355" y="240" width="210" height="92"/>
+  <text class="label" x="393" y="275">Manager</text>
+  <text class="small" x="385" y="303">多连接、命名空间、清理</text>
+
+  <rect class="hot" x="625" y="240" width="210" height="92"/>
+  <text class="label" x="682" y="275">Session</text>
+  <text class="small" x="655" y="303">一条 Client 与生命周期</text>
+
+  <rect class="boundary" x="895" y="240" width="210" height="92"/>
+  <text class="label" x="935" y="275">MCP SDK</text>
+  <text class="small" x="930" y="303">JSON-RPC / stdio / Adapter</text>
+
+  <rect class="boundary" x="1165" y="240" width="285" height="92"/>
+  <text class="label" x="1212" y="275">MCP Server 子进程</text>
+  <text class="small" x="1206" y="303">Initialize → tools/list</text>
+
+  <path class="lineBlue" d="M295 286H355"/>
+  <path class="lineBlue" d="M565 286H625"/>
+  <path class="lineOrange" d="M835 286H895"/>
+  <path class="lineOrange" d="M1105 286H1165"/>
+
+  <rect x="85" y="362" width="92" height="30" rx="15" fill="#3f9465"/>
+  <text class="tag" x="108" y="383">对话期</text>
+  <rect class="support" x="85" y="412" width="210" height="92"/>
+  <text class="label" x="128" y="447">Eino ReAct</text>
+  <text class="small" x="111" y="475">模型选择工具、循环执行</text>
+
+  <rect class="support" x="355" y="412" width="210" height="92"/>
+  <text class="label" x="393" y="447">Catalog</text>
+  <text class="small" x="385" y="475">启用筛选与 /tools 视图</text>
+
+  <rect class="support" x="625" y="412" width="210" height="92"/>
+  <text class="label" x="651" y="447">命名空间代理</text>
+  <text class="small" x="653" y="475">只改模型侧名称</text>
+
+  <rect class="boundary" x="895" y="412" width="210" height="92"/>
+  <text class="label" x="935" y="447">MCP Adapter</text>
+  <text class="small" x="923" y="475">委托原始 tools/call</text>
+
+  <rect class="boundary" x="1165" y="412" width="285" height="92"/>
+  <text class="label" x="1212" y="447">MCP Server Handler</text>
+  <text class="small" x="1236" y="475">执行业务并返回结果</text>
+
+  <path class="line" d="M295 458H355"/>
+  <path class="line" d="M565 458H625"/>
+  <path class="lineOrange" d="M835 458H895"/>
+  <path class="lineOrange" d="M1105 458H1165"/>
+
+  <rect class="archive" x="85" y="530" width="1365" height="48"/>
+  <text class="label" x="112" y="560">examples/selfbuilt-runtime：历史教学对照，不在 cmd/agenthub 生产调用链上</text>
+
+  <rect class="panel" x="55" y="625" width="1490" height="360"/>
+  <text class="subtitle" x="85" y="667">二、D.4 第二阶段只改“启动期”：握手超时 + 有限重试</text>
+
+  <rect class="hot" x="85" y="715" width="190" height="92"/>
+  <text class="label" x="116" y="750">OpenServers</text>
+  <text class="small" x="106" y="778">读取 ConnectionPolicy</text>
+
+  <rect class="hot" x="335" y="715" width="225" height="92"/>
+  <text class="label" x="371" y="750">attemptContext</text>
+  <text class="small" x="366" y="778">每次尝试独立 Timeout</text>
+
+  <rect class="boundary" x="620" y="715" width="230" height="92"/>
+  <text class="label" x="679" y="750">OpenStdio</text>
+  <text class="small" x="646" y="778">Initialize + tools/list</text>
+
+  <polygon points="975,710 1090,761 975,812 860,761" fill="#fff6e8" stroke="#d98b2b" stroke-width="2"/>
+  <text class="label" x="927" y="754">成功？</text>
+  <text class="small" x="923" y="780">含完整工具发现</text>
+
+  <rect class="support" x="1175" y="690" width="275" height="92"/>
+  <text class="label" x="1235" y="725">返回 ready Session</text>
+  <text class="small" x="1210" y="753">取消 attemptContext</text>
+
+  <rect class="danger" x="1175" y="825" width="275" height="100"/>
+  <text class="label" x="1212" y="860">关闭失败 Client</text>
+  <text class="small" x="1198" y="888">还有次数则等待 RetryDelay</text>
+  <text class="small" x="1226" y="912">再创建全新 Session</text>
+
+  <path class="lineBlue" d="M275 761H335"/>
+  <path class="lineBlue" d="M560 761H620"/>
+  <path class="lineOrange" d="M850 761H860"/>
+  <path class="line" d="M1090 761H1175"/>
+  <text class="small" x="1108" y="742">是</text>
+  <path class="lineOrange" d="M975 812V875H1175"/>
+  <text class="small" x="991" y="850">否</text>
+  <path class="lineDash" d="M1175 905H1060C1030 905 1015 940 985 940H470C440 940 447 821 447 807"/>
+
+  <rect x="85" y="840" width="680" height="95" rx="16" fill="#fff0f0" stroke="#cf4b4b" stroke-width="2"/>
+  <text class="note" x="112" y="875">明确边界：只重试“尚未建立成功的连接”</text>
+  <text class="body" x="112" y="904">tools/call 默认不自动重试，避免写操作被重复执行。</text>
+
+  <text class="small" x="85" y="965">阅读判断：若一层不能指出真实重复、冲突、生命周期或外部协议边界，就不应继续保留。</text>
+</svg>
