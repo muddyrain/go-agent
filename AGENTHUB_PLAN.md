@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1 已掌握，下一节 E.2 Hertz + SSE |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.2 已掌握，下一节 E.3 Web Playground |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.1 已完成；下一节 E.2 引入 CloudWeGo Hertz，并新增 SSE 流式聊天。框架迁移必须与用户可见能力一起发生，不安排只有框架替换的课程。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1**
+- 当前路线决策：**E.2 已完成；Hertz 替换 net/http 并新增 SSE 流式聊天，框架迁移与用户可见能力同时发生。下一节 E.3 构建最小 Web Playground 前端页面。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.2**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -356,13 +356,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.1 测试接缝：`internal/httpapi` 用仅包含 `Generate` 的最小接口隔离真实模型，保护成功响应、非法 JSON、空消息、Agent 错误、nil 消息以及请求 Context 和消息输入；该接口只解决当前 Handler 的外部依赖测试问题
 - E.1 验证：用户已真实运行 CLI 与 HTTP 成功路径；`go test ./...`、`go vet ./...`、`go build ./...` 和 `git diff --check` 全部通过
 - E.1 理解验收：能说明 `cmd/agenthub` 是组合入口，CLI 与 HTTP 是不同适配层，`internal/httpapi` 不应知道 MCP Server 启动细节；集中校正 `request.Context()` 的核心价值是传播请求取消，而不只是表示单次请求
-- 下一节：**E.2 CloudWeGo Hertz + SSE 流式聊天**
-- 下一节只做：在保留 `/chat` 行为的同时迁入 Hertz，并新增客户端可实时观察的流式回答；用真实路由和流式需求证明框架价值
-- 下一节明确不做：持久化、RAG、完整认证体系，以及没有现存重复支撑的通用 Runtime、Repository 或 Controller 层
+- E.2 框架迁移：`internal/httpapi` 从标准库 `net/http` 迁入 CloudWeGo Hertz；`NewServer` 返回 `*server.Hertz`，Handler 签名统一为 `func(ctx context.Context, c *app.RequestContext)`，`Run` 使用 `h.Spin()` 启动；`cmd/agenthub/main.go` 调用方式不变
+- E.2 SSE 流式端点：新增 `POST /chat/stream`，调用 `reactAgent.Stream()` 获取增量流，通过 `sse.NewWriter(c)` 逐块推送 `chunk` 事件，流正常结束发送 `done` 事件，流中断发送 `error` 事件；`ctx` 携带客户端断开信号，可传播到模型与工具调用
+- E.2 事件协议：`event: chunk` + `data: {"content":"..."}` 推送增量文本；`event: done` + `data: {}` 表示正常结束；`event: error` + `data: {"error":"..."}` 表示流中断；SSE writer 创建后只能写事件，不能再调用 `c.JSON`
+- E.2 generator 接口：从仅含 `Generate` 扩展为同时含 `Generate` 和 `Stream`，`*react.Agent` 自然同时满足；测试 fake 实现只需覆盖这两个方法，不需要完整实现 react.Agent
+- E.2 测试策略：同步 `/chat` 端点使用 Hertz `ut.PerformRequest` 内存测试；SSE `/chat/stream` 端点因 `sse.NewWriter` 需要真实网络 writer，使用 `net.Listen` + `WithTransport(standard.NewTransporter)` 启动随机端口真实服务器测试；覆盖成功路径、非法请求、Stream 启动失败和流中途错误
+- E.2 可见结果：`curl -N -X POST /chat/stream` 实时观察到逐字 chunk 事件（实测 12 个 chunk + 1 个空 chunk + done），同步 `/chat` 行为保持不变；空消息和非法 JSON 返回 400
+- E.2 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./...` 全部通过；`internal/httpapi` 包 8 个测试全部通过
+- E.2 理解验收：能说明 Hertz Handler 双参数职责分离、SSE 事件类型与 JSON 数据体的设计原因、`io.EOF` 与流关闭的语义、客户端断开通过 context 协作式取消的传播机制、Go 隐式接口对最小能力定义的好处
+- 下一节：**E.3 最小 Web Playground**
+- 下一节只做：基于已有 `/chat` 和 `/chat/stream` 构建一个最小 HTML 聊天页面，支持输入消息、流式显示回答、调用工具时显示状态；不做用户系统、会话列表、消息持久化
+- 下一节明确不做：认证、多会话管理、消息持久化、文件上传、完整的前端框架引入
 
 ## 9. 下一节理解验收题
 
-E.1 的集中理解验收已通过：学习者能够说明组合入口、CLI/HTTP 适配层和 MCP 细节之间的职责边界；对 `request.Context()` 向模型与工具链传播客户端取消、请求取消或超时的语义已集中补充。
+E.2 的集中理解验收已通过：学习者能够说明 Hertz Handler 双参数职责分离、SSE 事件协议设计、流生命周期与 context 取消传播机制，以及 Go 隐式接口对最小能力定义的好处。
 
 ## 10. 历史路线处理
 
