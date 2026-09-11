@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.2 已掌握，下一节 E.3 Web Playground |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.3 已掌握，下一节 E.4 工具调用状态与事件丰富化 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.2 已完成；Hertz 替换 net/http 并新增 SSE 流式聊天，框架迁移与用户可见能力同时发生。下一节 E.3 构建最小 Web Playground 前端页面。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.2**
+- 当前路线决策：**E.3 已完成；最小 Web Playground 页面上线，项目第一次有了可在浏览器中直接使用的产品形态。下一节 E.4 在 SSE 中新增工具调用事件，让 Playground 能显示模型正在调用什么工具。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -364,13 +364,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.2 可见结果：`curl -N -X POST /chat/stream` 实时观察到逐字 chunk 事件（实测 12 个 chunk + 1 个空 chunk + done），同步 `/chat` 行为保持不变；空消息和非法 JSON 返回 400
 - E.2 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./...` 全部通过；`internal/httpapi` 包 8 个测试全部通过
 - E.2 理解验收：能说明 Hertz Handler 双参数职责分离、SSE 事件类型与 JSON 数据体的设计原因、`io.EOF` 与流关闭的语义、客户端断开通过 context 协作式取消的传播机制、Go 隐式接口对最小能力定义的好处
-- 下一节：**E.3 最小 Web Playground**
-- 下一节只做：基于已有 `/chat` 和 `/chat/stream` 构建一个最小 HTML 聊天页面，支持输入消息、流式显示回答、调用工具时显示状态；不做用户系统、会话列表、消息持久化
-- 下一节明确不做：认证、多会话管理、消息持久化、文件上传、完整的前端框架引入
+- E.3 静态页面：新增 `internal/httpapi/web/index.html` 单页聊天界面，内联 CSS 与 JS，不引入前端框架；包含消息列表、用户/助手气泡区分、输入框、发送按钮、Enter 发送、自动滚动到底部
+- E.3 go embed：使用 `//go:embed web/index.html` 将页面固化进二进制，`indexHandler` 通过 `c.Data(200, "text/html; charset=utf-8", indexHTML)` 返回；运行时不依赖外部文件路径，部署只需一个二进制
+- E.3 前端 SSE 消费：因 `/chat/stream` 是 POST，浏览器原生 `EventSource` 只支持 GET，故使用 `fetch()` + `response.body.getReader()` + `TextDecoder` 手动读取字节流；用 buffer 累积数据，按 `\n\n` 分割 SSE 事件，逐行解析 `event:` 和 `data:`
+- E.3 流式渲染：收到第一个 `chunk` 事件时替换"正在输入..."占位文本，后续 chunk 追加到同一助手气泡；`done` 事件标记完成，`error` 事件显示错误样式；`isGenerating` 状态防止重复发送
+- E.3 分层验证：E.3 完全未修改 `/chat` 和 `/chat/stream` 端点代码，只新增静态页面和前端逻辑；证明 API 协议层与表现层解耦，换 UI 不影响业务 API
+- E.3 可见结果：浏览器打开 `http://127.0.0.1:8080/` 看到聊天页面，输入消息后回答流式显示；实测模型调用 `calculator__add_numbers` 计算 17+25，最终回答 42
+- E.3 测试：新增 `TestIndexHandlerReturnsHTML` 验证 `GET /` 返回 200、正确 Content-Type 和页面内容；全项目 `go test ./...`、`go vet ./...`、`go build ./...` 全部通过
+- E.3 理解验收：能说明 go embed 的作用与编译期固化特性、fetch 替代 EventSource 的原因（POST 限制）、TCP 字节流与 SSE 事件边界不对应因此需要 buffer、firstChunk 替换占位文本的作用、关注点分离原则（换传输协议或 UI 不影响业务逻辑）
+- 下一节：**E.4 工具调用状态与 SSE 事件丰富化**
+- 下一节只做：在 SSE 流中新增 `tool_start` / `tool_end` 事件，通过 Eino Callback 捕获工具调用；Playground 页面显示"正在调用工具：xxx"状态；不修改 Agent 执行逻辑
+- 下一节明确不做：工具参数展示、工具结果展示、多轮会话历史、用户系统、消息持久化
 
 ## 9. 下一节理解验收题
 
-E.2 的集中理解验收已通过：学习者能够说明 Hertz Handler 双参数职责分离、SSE 事件协议设计、流生命周期与 context 取消传播机制，以及 Go 隐式接口对最小能力定义的好处。
+E.3 的集中理解验收已通过：学习者能够说明 go embed 的编译期固化作用、fetch 替代 EventSource 的 POST 限制、TCP 字节流与 SSE 事件边界不对应因此需要 buffer 重组、firstChunk 占位文本替换机制，以及 API 层与表现层的关注点分离原则。
 
 ## 10. 历史路线处理
 

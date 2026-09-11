@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"io"
@@ -14,6 +15,9 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/protocol/sse"
 )
+
+//go:embed web/index.html
+var indexHTML []byte
 
 const address = "127.0.0.1:8080"
 
@@ -32,6 +36,12 @@ type errorResponse struct {
 // chunkEvent 是 SSE "chunk" 事件的数据体
 type chunkEvent struct {
 	Content string `json:"content"`
+}
+
+// indexHandler 返回嵌入的聊天页面 HTML。
+// 静态内容通过 go:embed 固化进二进制，避免运行时依赖外部文件路径。
+func indexHandler(_ context.Context, c *app.RequestContext) {
+	c.Data(200, "text/html; charset=utf-8", indexHTML)
 }
 
 // generator 是 HTTP Handler 所需的最小 Agent 能力。
@@ -59,6 +69,8 @@ func NewServer(
 	systemPrompt string,
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
+
+	h.GET("/", indexHandler)
 
 	h.POST("/chat", func(ctx context.Context, c *app.RequestContext) {
 		chatHandler(ctx, c, reactAgent, systemPrompt)

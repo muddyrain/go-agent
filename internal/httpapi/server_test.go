@@ -148,6 +148,29 @@ func postJSONAndRead(
 	return resp.StatusCode, string(respBody)
 }
 
+// --- 静态页面路由测试（内存测试）---
+
+func TestIndexHandlerReturnsHTML(t *testing.T) {
+	h := NewServer(fakeGenerator{}, "system prompt")
+	resp := ut.PerformRequest(h.Engine, "GET", "/", nil)
+
+	if resp.Code != 200 {
+		t.Fatalf("status = %d, want 200", resp.Code)
+	}
+	if got := resp.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want text/html; charset=utf-8", got)
+	}
+
+	body := resp.Body.String()
+	// 验证嵌入的 HTML 包含页面标识和基本结构
+	if !strings.Contains(body, "AgentHub Playground") {
+		t.Fatalf("body missing page title\nbody: %s", body)
+	}
+	if !strings.Contains(body, "<!doctype html>") {
+		t.Fatalf("body missing HTML doctype\nbody: %s", body)
+	}
+}
+
 // --- 同步 /chat 端点测试（内存测试）---
 
 func TestChatHandlerReturnsAgentAnswer(t *testing.T) {
