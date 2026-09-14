@@ -158,10 +158,13 @@ func run() error {
 		"不要在工具调用前输出计划或说明文字。" +
 		"如果回答不依赖项目文件，则直接回答，不要调用工具。"
 
+	sessionManager := httpapi.NewSessionManager(20) // 每个会话保留最近 20 条消息
+
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
 		return httpapi.Run(
 			reactAgent,
 			systemPrompt,
+			sessionManager,
 		)
 	}
 

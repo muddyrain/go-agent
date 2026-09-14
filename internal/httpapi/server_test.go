@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -98,6 +99,7 @@ func startStreamTestServer(
 	t *testing.T,
 	g generator,
 	systemPrompt string,
+	sessionManager *SessionManager,
 ) string {
 	t.Helper()
 
@@ -111,7 +113,7 @@ func startStreamTestServer(
 		server.WithTransport(standard.NewTransporter),
 	)
 	h.POST("/chat/stream", func(ctx context.Context, c *app.RequestContext) {
-		streamChatHandler(ctx, c, g, systemPrompt)
+		streamChatHandler(ctx, c, g, systemPrompt, sessionManager)
 	})
 
 	go h.Spin()
@@ -212,7 +214,7 @@ func TestNewToolCallbackIgnoresNonToolComponents(t *testing.T) {
 // --- 静态页面路由测试（内存测试）---
 
 func TestIndexHandlerReturnsHTML(t *testing.T) {
-	h := NewServer(fakeGenerator{}, "system prompt")
+	h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(20))
 	resp := ut.PerformRequest(h.Engine, "GET", "/", nil)
 
 	if resp.Code != 200 {
@@ -254,7 +256,7 @@ func TestChatHandlerReturnsAgentAnswer(t *testing.T) {
 		},
 	}
 
-	h := NewServer(generator, "system prompt")
+	h := NewServer(generator, "system prompt", NewSessionManager(20))
 	resp := postJSONToEngine(t, h, "/chat", `{"message":"  hello  "}`)
 
 	if resp.Code != 200 {
@@ -264,8 +266,16 @@ func TestChatHandlerReturnsAgentAnswer(t *testing.T) {
 		t.Fatalf("Content-Type = %q", got)
 	}
 	// Hertz c.JSON 末尾不加换行符（标准库 json.Encoder.Encode 会加）
-	if got := resp.Body.String(); got != `{"answer":"world"}` {
-		t.Fatalf("body = %q", got)
+	// 响应包含随机 session_id，用 JSON 解析后检查字段
+	var result chatResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if result.Answer != "world" {
+		t.Fatalf("answer = %q, want world", result.Answer)
+	}
+	if result.SessionID == "" {
+		t.Fatal("response should include session_id")
 	}
 }
 
@@ -292,7 +302,7 @@ func TestChatHandlerRejectsInvalidRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewServer(fakeGenerator{}, "system prompt")
+			h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(20))
 			resp := postJSONToEngine(t, h, "/chat", tt.body)
 
 			if resp.Code != tt.wantStatus {
@@ -331,7 +341,7 @@ func TestChatHandlerReturnsBadGatewayWhenAgentFails(t *testing.T) {
 					return tt.response, tt.err
 				},
 			}
-			h := NewServer(generator, "system prompt")
+			h := NewServer(generator, "system prompt", NewSessionManager(20))
 			resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
 
 			if resp.Code != 502 {
@@ -367,7 +377,7 @@ func TestStreamChatHandlerSendsChunksAndDone(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt")
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(20))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 200 {
@@ -381,7 +391,7 @@ func TestStreamChatHandlerSendsChunksAndDone(t *testing.T) {
 		`data: {"content":"llo"}`,
 		`data: {"content":" world"}`,
 		"event: done",
-		"data: {}",
+		`data: {"session_id":"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q\nbody:\n%s", want, body)
@@ -421,7 +431,7 @@ func TestStreamChatHandlerRejectsInvalidRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 请求校验失败时不会调用 Stream，传 nil 也安全
-			baseURL := startStreamTestServer(t, fakeGenerator{}, "system prompt")
+			baseURL := startStreamTestServer(t, fakeGenerator{}, "system prompt", NewSessionManager(20))
 			status, body := postJSONAndRead(t, baseURL, "/chat/stream", tt.body)
 
 			if status != tt.wantStatus {
@@ -445,7 +455,7 @@ func TestStreamChatHandlerReturnsBadGatewayWhenStreamFails(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt")
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(20))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 502 {
@@ -470,7 +480,7 @@ func TestStreamChatHandlerSendsErrorEventWhenStreamInterrupts(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt")
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(20))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 200 {
@@ -490,5 +500,152 @@ func TestStreamChatHandlerSendsErrorEventWhenStreamInterrupts(t *testing.T) {
 	}
 	if strings.Contains(body, "event: done") {
 		t.Fatalf("body should not contain done event on stream interruption\nbody:\n%s", body)
+	}
+}
+
+// --- 多轮对话与会话历史测试 ---
+
+func TestChatHandlerMultiTurnPreservesHistory(t *testing.T) {
+	// 记录每次 Generate 调用收到的消息，用于验证历史是否正确传递
+	var receivedInputs [][]*schema.Message
+	callCount := 0
+
+	generator := fakeGenerator{
+		generate: func(
+			_ context.Context,
+			input []*schema.Message,
+			_ ...agent.AgentOption,
+		) (*schema.Message, error) {
+			copy := make([]*schema.Message, len(input))
+			for i, m := range input {
+				copy[i] = m
+			}
+			receivedInputs = append(receivedInputs, copy)
+			callCount++
+
+			if callCount == 1 {
+				return schema.AssistantMessage("你好小明", nil), nil
+			}
+			return schema.AssistantMessage("你叫小明", nil), nil
+		},
+	}
+
+	sessionManager := NewSessionManager(20)
+	h := NewServer(generator, "你是助手", sessionManager)
+
+	// 第一轮：创建会话
+	resp1 := postJSONToEngine(t, h, "/chat", `{"message":"我叫小明"}`)
+	if resp1.Code != 200 {
+		t.Fatalf("first request status = %d, body = %s", resp1.Code, resp1.Body.String())
+	}
+
+	var result1 chatResponse
+	if err := json.Unmarshal(resp1.Body.Bytes(), &result1); err != nil {
+		t.Fatalf("unmarshal first response: %v", err)
+	}
+	if result1.SessionID == "" {
+		t.Fatal("first response missing session_id")
+	}
+	sessionID := result1.SessionID
+
+	// 验证第一轮 Agent 收到的消息：system + user（没有历史）
+	if len(receivedInputs) != 1 {
+		t.Fatalf("received %d calls, want 1", len(receivedInputs))
+	}
+	if len(receivedInputs[0]) != 2 {
+		t.Fatalf("first call got %d messages, want 2 (system + user)", len(receivedInputs[0]))
+	}
+	if receivedInputs[0][0].Role != schema.System {
+		t.Fatalf("first message role = %s, want system", receivedInputs[0][0].Role)
+	}
+	if receivedInputs[0][1].Role != schema.User || receivedInputs[0][1].Content != "我叫小明" {
+		t.Fatalf("second message = %+v, want user/我叫小明", receivedInputs[0][1])
+	}
+
+	// 第二轮：带上 session_id
+	body2 := `{"message":"我叫什么","session_id":"` + sessionID + `"}`
+	resp2 := postJSONToEngine(t, h, "/chat", body2)
+	if resp2.Code != 200 {
+		t.Fatalf("second request status = %d, body = %s", resp2.Code, resp2.Body.String())
+	}
+
+	var result2 chatResponse
+	if err := json.Unmarshal(resp2.Body.Bytes(), &result2); err != nil {
+		t.Fatalf("unmarshal second response: %v", err)
+	}
+	if result2.SessionID != sessionID {
+		t.Fatalf("second response session_id = %s, want %s", result2.SessionID, sessionID)
+	}
+
+	// 验证第二轮 Agent 收到的消息：system + 第一轮user + 第一轮assistant + 第二轮user
+	if len(receivedInputs) != 2 {
+		t.Fatalf("received %d calls, want 2", len(receivedInputs))
+	}
+	if len(receivedInputs[1]) != 4 {
+		t.Fatalf("second call got %d messages, want 4 (system + history + user)", len(receivedInputs[1]))
+	}
+	if receivedInputs[1][1].Role != schema.User || receivedInputs[1][1].Content != "我叫小明" {
+		t.Fatalf("history user message = %+v, want user/我叫小明", receivedInputs[1][1])
+	}
+	if receivedInputs[1][2].Role != schema.Assistant || receivedInputs[1][2].Content != "你好小明" {
+		t.Fatalf("history assistant message = %+v, want assistant/你好小明", receivedInputs[1][2])
+	}
+	if receivedInputs[1][3].Role != schema.User || receivedInputs[1][3].Content != "我叫什么" {
+		t.Fatalf("current user message = %+v, want user/我叫什么", receivedInputs[1][3])
+	}
+}
+
+func TestChatHandlerNewSessionWithoutID(t *testing.T) {
+	generator := fakeGenerator{
+		generate: func(
+			_ context.Context,
+			_ []*schema.Message,
+			_ ...agent.AgentOption,
+		) (*schema.Message, error) {
+			return schema.AssistantMessage("回答", nil), nil
+		},
+	}
+
+	h := NewServer(generator, "system", NewSessionManager(20))
+
+	resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
+	if resp.Code != 200 {
+		t.Fatalf("status = %d", resp.Code)
+	}
+
+	var result chatResponse
+	if err := json.Unmarshal(resp.Body.Bytes(), &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result.SessionID == "" {
+		t.Fatal("response should include session_id when none was provided")
+	}
+}
+
+func TestStreamChatHandlerDoneEventIncludesSessionID(t *testing.T) {
+	generator := fakeGenerator{
+		stream: func(
+			_ context.Context,
+			_ []*schema.Message,
+			_ ...agent.AgentOption,
+		) (*schema.StreamReader[*schema.Message], error) {
+			return newMessageStream(
+				schema.AssistantMessage("hello", nil),
+			), nil
+		},
+	}
+
+	baseURL := startStreamTestServer(t, generator, "system", NewSessionManager(20))
+	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hi"}`)
+
+	if status != 200 {
+		t.Fatalf("status = %d", status)
+	}
+
+	if !strings.Contains(body, "event: done") {
+		t.Fatalf("body missing done event\nbody:\n%s", body)
+	}
+	if !strings.Contains(body, `"session_id":"`) {
+		t.Fatalf("done event missing session_id\nbody:\n%s", body)
 	}
 }

@@ -93,19 +93,25 @@
         background: #aaa;
         cursor: not-allowed;
       }
+      .secondary {
+        background: #6b7280;
+      }
+      .secondary:hover {
+        background: #4b5563;
+      }
     </style>
   </head>
   <body>
     <header>AgentHub Playground</header>
     <div id="chat"></div>
     <div id="input-area">
-      <input
-        type="text"
+      <textarea
         id="message-input"
         placeholder="输入消息..."
-        autocomplete="off"
-      />
+        rows="1"
+      ></textarea>
       <button id="send-btn">发送</button>
+      <button id="new-chat-btn" class="secondary">新对话</button>
     </div>
     <script>
       const chatDiv = document.getElementById("chat");
@@ -142,7 +148,10 @@
           const response = await fetch("/chat/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ message: text }),
+            body: JSON.stringify({
+              message: text,
+              session_id: loadSessionID(),
+            }),
           });
 
           if (!response.ok) {
@@ -199,6 +208,9 @@
                   assistantDiv.textContent += chunk.content;
                 }
                 chatDiv.scrollTop = chatDiv.scrollHeight;
+              } else if (eventType === "done") {
+                const evt = JSON.parse(data);
+                saveSessionID(evt.session_id); // 保存后端返回的会话 ID
               } else if (eventType === "error") {
                 const err = JSON.parse(data);
                 throw new Error(err.error || "stream error");
@@ -215,6 +227,27 @@
           input.focus();
         }
       }
+      // --- 会话管理 ---
+      const SESSION_KEY = "agenthub_session_id";
+
+      function loadSessionID() {
+        return localStorage.getItem(SESSION_KEY) || "";
+      }
+
+      function saveSessionID(id) {
+        if (id) {
+          localStorage.setItem(SESSION_KEY, id);
+        }
+      }
+
+      function clearSession() {
+        localStorage.removeItem(SESSION_KEY);
+        chatDiv.innerHTML = "";
+      }
+
+      document
+        .getElementById("new-chat-btn")
+        .addEventListener("click", clearSession);
 
       sendBtn.addEventListener("click", sendMessage);
       input.addEventListener("keydown", (e) => {

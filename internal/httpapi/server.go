@@ -25,11 +25,18 @@ var indexHTML []byte
 const address = "127.0.0.1:8080"
 
 type chatRequest struct {
-	Message string `json:"message"`
+	Message   string `json:"message"`
+	SessionID string `json:"session_id,omitempty"` // 前端传的会话 ID，空表示新建
 }
 
 type chatResponse struct {
-	Answer string `json:"answer"`
+	Answer    string `json:"answer"`
+	SessionID string `json:"session_id,omitempty"` // 返回给前端保存的会话 ID
+}
+
+// doneEvent 是 SSE "done" 事件的数据体，携带会话 ID 供前端保存。
+type doneEvent struct {
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type errorResponse struct {
@@ -82,17 +89,18 @@ type generator interface {
 func NewServer(
 	reactAgent generator,
 	systemPrompt string,
+	sessionManager *SessionManager,
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
 
 	h.GET("/", indexHandler)
 
 	h.POST("/chat", func(ctx context.Context, c *app.RequestContext) {
-		chatHandler(ctx, c, reactAgent, systemPrompt)
+		chatHandler(ctx, c, reactAgent, systemPrompt, sessionManager)
 	})
 
 	h.POST("/chat/stream", func(ctx context.Context, c *app.RequestContext) {
-		streamChatHandler(ctx, c, reactAgent, systemPrompt)
+		streamChatHandler(ctx, c, reactAgent, systemPrompt, sessionManager)
 	})
 
 	return h
@@ -103,6 +111,7 @@ func chatHandler(
 	c *app.RequestContext,
 	reactAgent generator,
 	systemPrompt string,
+	sessionManager *SessionManager,
 ) {
 	var input chatRequest
 
@@ -117,27 +126,35 @@ func chatHandler(
 		c.JSON(400, errorResponse{Error: "message is required"})
 		return
 	}
+	// 获取或创建会话；input.SessionID 为空时自动新建
+	session := sessionManager.GetOrCreate(input.SessionID)
 
-	message, err := reactAgent.Generate(
-		ctx,
-		[]*schema.Message{
-			schema.SystemMessage(systemPrompt),
-			schema.UserMessage(input.Message),
-		},
-	)
+	// 构造消息：system + 历史 + 当前用户消息
+	userMsg := schema.UserMessage(input.Message)
+	messages := []*schema.Message{schema.SystemMessage(systemPrompt)}
+	messages = append(messages, sessionManager.GetHistory(session.ID)...)
+	messages = append(messages, userMsg)
+
+	assistantMsg, err := reactAgent.Generate(ctx, messages)
 
 	if err != nil {
 		log.Printf("execute HTTP chat: %v", err)
 		c.JSON(502, errorResponse{Error: "agent execution failed"})
 		return
 	}
-	if message == nil {
+	if assistantMsg == nil {
 		log.Printf("execute HTTP chat: agent returned nil message")
 		c.JSON(502, errorResponse{Error: "agent execution failed"})
 		return
 	}
 
-	c.JSON(200, chatResponse{Answer: message.Content})
+	// 把本轮对话存回历史
+	sessionManager.Append(session.ID, userMsg, assistantMsg)
+
+	c.JSON(200, chatResponse{
+		Answer:    assistantMsg.Content,
+		SessionID: session.ID,
+	})
 }
 
 // newToolCallback 创建只观察 Tool 组件的 Callback，将工具开始/结束事件
@@ -182,6 +199,7 @@ func streamChatHandler(
 	c *app.RequestContext,
 	reactAgent generator,
 	systemPrompt string,
+	sessionManager *SessionManager,
 ) {
 	var input chatRequest
 
@@ -201,13 +219,20 @@ func streamChatHandler(
 	toolEvents := make(chan toolEvent, 16)
 	toolCallback := newToolCallback(toolEvents)
 
+	// 获取或创建会话
+	session := sessionManager.GetOrCreate(input.SessionID)
+	// 构造消息：system + 历史 + 当前用户消息
+	userMsg := schema.UserMessage(input.Message)
+	messages := []*schema.Message{schema.SystemMessage(systemPrompt)}
+	messages = append(messages, sessionManager.GetHistory(session.ID)...)
+	messages = append(messages, userMsg)
+	// fullAnswer 累积所有 chunk 内容，流结束后用于存历史
+	var fullAnswer strings.Builder
+
 	// Stream 启动失败时还未写入 SSE，可以返回普通 JSON 502。
 	stream, err := reactAgent.Stream(
 		ctx,
-		[]*schema.Message{
-			schema.SystemMessage(systemPrompt),
-			schema.UserMessage(input.Message),
-		},
+		messages,
 		agent.WithComposeOptions(
 			compose.WithCallbacks(toolCallback),
 		),
@@ -257,8 +282,13 @@ func streamChatHandler(
 
 		case result, ok := <-chunkCh:
 			if !ok {
+				// 流结束：把本轮对话存回历史，然后发 done 事件带 session_id
+				assistantMsg := schema.AssistantMessage(fullAnswer.String(), nil)
+				sessionManager.Append(session.ID, userMsg, assistantMsg)
+
+				doneData, _ := json.Marshal(doneEvent{SessionID: session.ID})
 				// chunkCh 关闭意味着 goroutine 已退出（流结束或出错）
-				writer.WriteEvent("", "done", []byte("{}"))
+				writer.WriteEvent("", "done", doneData)
 				return
 			}
 			if errors.Is(result.err, io.EOF) {
@@ -274,6 +304,7 @@ func streamChatHandler(
 			if result.chunk == nil {
 				continue
 			}
+			fullAnswer.WriteString(result.chunk.Content) // 新增
 			data, err := json.Marshal(chunkEvent{Content: result.chunk.Content})
 			if err != nil {
 				log.Printf("marshal chunk event: %v", err)
@@ -290,10 +321,11 @@ func streamChatHandler(
 func Run(
 	reactAgent generator,
 	systemPrompt string,
+	sessionManager *SessionManager,
 ) error {
 	log.Printf("HTTP server listening on http://%s", address)
 
-	h := NewServer(reactAgent, systemPrompt)
+	h := NewServer(reactAgent, systemPrompt, sessionManager)
 	h.Spin()
 	return nil
 }

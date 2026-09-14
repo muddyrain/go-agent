@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.4 已掌握，下一节 E.5 会话历史与多轮对话 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.5 已掌握，下一节 E.6 会话过期清理与并发安全 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.4 已完成；SSE 流新增 tool_start/tool_end 事件，Web Playground 可实时显示工具调用状态。下一节 E.5 在 HTTP 层实现会话历史与多轮对话。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.4**
+- 当前路线决策：**E.5 已完成；HTTP 层实现会话历史与多轮对话，SessionManager 封装并发安全的内存会话存储，前端通过 localStorage 持久化 session_id。下一节 E.6 会话过期清理与并发安全加固。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -380,13 +380,23 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.4 可见结果：curl 验证 SSE 流按顺序输出 tool_start → chunk → tool_end → chunk... → done；浏览器 Playground 显示工具调用状态和最终回答，实测 `calculator__add_numbers` 计算 17+25=42
 - E.4 测试：新增 `TestNewToolCallbackSendsStartAndEnd` 验证 Tool 组件开始/结束正确发送事件；新增 `TestNewToolCallbackIgnoresNonToolComponents` 验证非 Tool 组件被过滤；全项目 `go test ./...`、`go vet ./...`、`go build ./...` 全部通过
 - E.4 理解验收：能说明 Callback 旁路观察与 SSE 写入的 goroutine 隔离、channel 桥梁的必要性、带缓冲与非阻塞发送的设计原因、阻塞 Recv 转 select 的 goroutine 转发模式、select 随机选择对事件顺序的影响
-- 下一节：**E.5 会话历史与多轮对话**
-- 下一节只做：在 HTTP 层维护会话历史，支持同一会话内多轮对话；前端生成/保存 session_id，后端按 session 维护 history；不做持久化、多用户隔离、会话列表
-- 下一节明确不做：数据库持久化、用户认证、会话列表 UI、消息编辑/删除、并发会话安全
+- E.5 SessionManager：独立类型封装会话存储，包含 `sync.Mutex`、`map[string]*Session`、`maxHistory`；所有方法加锁保证并发安全，HTTP 每个请求在独立 goroutine 中运行
+- E.5 Session 结构体：`ID`（32 字符 hex，由 crypto/rand 生成）、`History`（[]*schema.Message）、`LastAccess`（time.Time，为未来过期清理预留）
+- E.5 核心方法：`GetOrCreate(id)`（空 ID 或不存在时新建）、`GetHistory(id)`（返回副本防止外部修改内部状态）、`Append(id, userMsg, assistantMsg)`（追加一轮对话，超过 maxHistory 截断最旧的）
+- E.5 请求/响应改造：`chatRequest` 新增 `SessionID`（omitempty），`chatResponse` 新增 `SessionID`；SSE 通过 `doneEvent{SessionID}` 在 done 事件中返回会话 ID
+- E.5 chatHandler 流程：GetOrCreate → GetHistory → 构造 [system, ...history, userMsg] → Generate → Append → 返回 {answer, session_id}
+- E.5 streamChatHandler 流程：同上，但用 `strings.Builder` 累积所有 chunk 内容，流结束后构造完整 assistantMsg 并 Append，done 事件携带 session_id
+- E.5 前端接入：`localStorage` 保存 `agenthub_session_id`；`loadSessionID()`/`saveSessionID()`/`clearSession()` 三个函数；请求 body 带上 session_id；done 事件解析并保存 session_id；新增"新对话"按钮清除会话并清空聊天区域
+- E.5 可见结果：curl 验证两轮对话携带相同 session_id，第二轮 Agent 收到的消息包含第一轮历史；浏览器验证多轮对话记忆、新对话重置、页面刷新后会话保持
+- E.5 测试：新增 `session_test.go`（12 个单元测试覆盖创建、获取、副本隔离、截断、ID 格式、唯一性等）；新增 `TestChatHandlerMultiTurnPreservesHistory`（验证第二轮消息包含第一轮历史）、`TestChatHandlerNewSessionWithoutID`、`TestStreamChatHandlerDoneEventIncludesSessionID`；更新旧测试断言以适配新增 session_id 字段
+- E.5 理解验收：能说明为什么需要独立 SessionManager（map 并发不安全、逻辑封装）、GetHistory 返回副本的原因（防止数据竞争）、maxHistory 截断的设计（内存上限）、crypto/rand vs math/rand 的区别、流式接口累积完整回答后再存历史的原因、前端 localStorage 持久化的作用
+- 下一节：**E.6 会话过期清理与并发安全加固**
+- 下一节只做：后台 goroutine 定期清理过期 session（基于 LastAccess）；SessionManager 方法并发安全审计与压力测试；不做持久化、多租户、会话列表
+- 下一节明确不做：数据库持久化、Redis、用户认证、会话列表 UI、消息编辑/删除
 
 ## 9. 下一节理解验收题
 
-E.4 的集中理解验收已通过：学习者能够说明 Callback 旁路观察与 SSE 写入的 goroutine 隔离、channel 桥梁的必要性、带缓冲与非阻塞发送的设计原因、阻塞 Recv 转 select 的 goroutine 转发模式，以及 select 随机选择对事件顺序的影响。
+E.5 的集中理解验收已通过：学习者能够说明为什么需要独立 SessionManager（map 并发不安全、逻辑封装）、GetHistory 返回副本的原因（防止数据竞争）、maxHistory 截断的设计（内存上限）、crypto/rand vs math/rand 的区别、流式接口累积完整回答后再存历史的原因，以及前端 localStorage 持久化的作用。
 
 ## 10. 历史路线处理
 
