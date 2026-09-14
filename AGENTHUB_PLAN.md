@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.3 已掌握，下一节 E.4 工具调用状态与事件丰富化 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.4 已掌握，下一节 E.5 会话历史与多轮对话 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.3 已完成；最小 Web Playground 页面上线，项目第一次有了可在浏览器中直接使用的产品形态。下一节 E.4 在 SSE 中新增工具调用事件，让 Playground 能显示模型正在调用什么工具。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.3**
+- 当前路线决策：**E.4 已完成；SSE 流新增 tool_start/tool_end 事件，Web Playground 可实时显示工具调用状态。下一节 E.5 在 HTTP 层实现会话历史与多轮对话。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.4**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -372,13 +372,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.3 可见结果：浏览器打开 `http://127.0.0.1:8080/` 看到聊天页面，输入消息后回答流式显示；实测模型调用 `calculator__add_numbers` 计算 17+25，最终回答 42
 - E.3 测试：新增 `TestIndexHandlerReturnsHTML` 验证 `GET /` 返回 200、正确 Content-Type 和页面内容；全项目 `go test ./...`、`go vet ./...`、`go build ./...` 全部通过
 - E.3 理解验收：能说明 go embed 的作用与编译期固化特性、fetch 替代 EventSource 的原因（POST 限制）、TCP 字节流与 SSE 事件边界不对应因此需要 buffer、firstChunk 替换占位文本的作用、关注点分离原则（换传输协议或 UI 不影响业务逻辑）
-- 下一节：**E.4 工具调用状态与 SSE 事件丰富化**
-- 下一节只做：在 SSE 流中新增 `tool_start` / `tool_end` 事件，通过 Eino Callback 捕获工具调用；Playground 页面显示"正在调用工具：xxx"状态；不修改 Agent 执行逻辑
-- 下一节明确不做：工具参数展示、工具结果展示、多轮会话历史、用户系统、消息持久化
+- E.4 SSE 事件扩展：新增 `tool_start` 和 `tool_end` 两种 SSE 事件，data 格式为 `{"name":"工具名"}`；原有 `chunk`/`done`/`error` 事件保持不变
+- E.4 Callback → Channel 桥梁：Eino Callback 运行在内部 goroutine 中，无法直接写 SSE；通过带缓冲 channel（容量 16）将工具事件从 Callback 传递到 handler 的 select 循环；非阻塞发送（`select { case ch <- evt: default: }`）避免 channel 满时阻塞 Eino 执行
+- E.4 阻塞 Recv 转 select：`stream.Recv()` 是阻塞调用，不能直接放在 select 中；用 goroutine 将 Recv 结果打包为 `chunkResult{chunk, err}` 转发到 `chunkCh`，handler 用 select 同时监听工具事件和文本 chunk
+- E.4 Callback 提取：`newToolCallback(toolEvents chan<- toolEvent)` 独立函数，只观察 `components.ComponentOfTool` 组件，忽略 ChatModel、Chain 等其他组件；便于单元测试和复用
+- E.4 前端工具状态：收到 `tool_start` 显示"🔧 正在调用工具：xxx"，收到 `tool_end` 显示"✅ 工具调用完成：xxx"；`afterToolStatus` 标记确保工具状态与回答文本之间换行分隔；`firstContent` 统一控制第一个内容（无论是 tool_start 还是 chunk）替换"正在输入..."占位
+- E.4 可见结果：curl 验证 SSE 流按顺序输出 tool_start → chunk → tool_end → chunk... → done；浏览器 Playground 显示工具调用状态和最终回答，实测 `calculator__add_numbers` 计算 17+25=42
+- E.4 测试：新增 `TestNewToolCallbackSendsStartAndEnd` 验证 Tool 组件开始/结束正确发送事件；新增 `TestNewToolCallbackIgnoresNonToolComponents` 验证非 Tool 组件被过滤；全项目 `go test ./...`、`go vet ./...`、`go build ./...` 全部通过
+- E.4 理解验收：能说明 Callback 旁路观察与 SSE 写入的 goroutine 隔离、channel 桥梁的必要性、带缓冲与非阻塞发送的设计原因、阻塞 Recv 转 select 的 goroutine 转发模式、select 随机选择对事件顺序的影响
+- 下一节：**E.5 会话历史与多轮对话**
+- 下一节只做：在 HTTP 层维护会话历史，支持同一会话内多轮对话；前端生成/保存 session_id，后端按 session 维护 history；不做持久化、多用户隔离、会话列表
+- 下一节明确不做：数据库持久化、用户认证、会话列表 UI、消息编辑/删除、并发会话安全
 
 ## 9. 下一节理解验收题
 
-E.3 的集中理解验收已通过：学习者能够说明 go embed 的编译期固化作用、fetch 替代 EventSource 的 POST 限制、TCP 字节流与 SSE 事件边界不对应因此需要 buffer 重组、firstChunk 占位文本替换机制，以及 API 层与表现层的关注点分离原则。
+E.4 的集中理解验收已通过：学习者能够说明 Callback 旁路观察与 SSE 写入的 goroutine 隔离、channel 桥梁的必要性、带缓冲与非阻塞发送的设计原因、阻塞 Recv 转 select 的 goroutine 转发模式，以及 select 随机选择对事件顺序的影响。
 
 ## 10. 历史路线处理
 

@@ -133,7 +133,10 @@
 
         addMessage("user", text);
         const assistantDiv = addMessage("assistant", "正在输入...");
-        let firstChunk = true; // 第一个 chunk 要替换"正在输入..."
+        // 第一个内容（无论是 tool_start 还是 chunk）都替换"正在输入..."占位文本
+        let firstContent = true;
+        // 标记上一个事件是否为工具状态，用于在工具状态与回答文本之间换行
+        let afterToolStatus = false;
 
         try {
           const response = await fetch("/chat/stream", {
@@ -167,13 +170,32 @@
                 if (line.startsWith("event: ")) eventType = line.slice(7);
                 if (line.startsWith("data: ")) data = line.slice(6);
               }
-
-              if (eventType === "chunk") {
-                const chunk = JSON.parse(data);
-                if (firstChunk) {
-                  assistantDiv.textContent = chunk.content;
-                  firstChunk = false;
+              if (eventType === "tool_start") {
+                const evt = JSON.parse(data);
+                if (firstContent) {
+                  assistantDiv.textContent = `🔧 正在调用工具：${evt.name}`;
+                  firstContent = false;
                 } else {
+                  assistantDiv.textContent += `\n🔧 正在调用工具：${evt.name}`;
+                }
+                afterToolStatus = true;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+              } else if (eventType === "tool_end") {
+                const evt = JSON.parse(data);
+                assistantDiv.textContent += `\n✅ 工具调用完成：${evt.name}`;
+                afterToolStatus = true;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+              } else if (eventType === "chunk") {
+                const chunk = JSON.parse(data);
+                if (firstContent) {
+                  assistantDiv.textContent = chunk.content;
+                  firstContent = false;
+                } else {
+                  // 工具状态与回答文本之间换行分隔；空 chunk 不触发换行
+                  if (afterToolStatus && chunk.content !== "") {
+                    assistantDiv.textContent += "\n";
+                    afterToolStatus = false;
+                  }
                   assistantDiv.textContent += chunk.content;
                 }
                 chatDiv.scrollTop = chatDiv.scrollHeight;

@@ -9,6 +9,9 @@ import (
 	"log"
 	"strings"
 
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components"
+	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/schema"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -36,6 +39,18 @@ type errorResponse struct {
 // chunkEvent 是 SSE "chunk" 事件的数据体
 type chunkEvent struct {
 	Content string `json:"content"`
+}
+
+// toolEvent 表示一次工具调用的开始或结束，通过 channel 从 Callback 传递到 SSE handler。
+type toolEvent struct {
+	Type string // "start" 或 "end"
+	Name string // 工具名称
+}
+
+// chunkResult 把 stream.Recv() 的返回值打包，便于通过 channel 传递。
+type chunkResult struct {
+	chunk *schema.Message
+	err   error
 }
 
 // indexHandler 返回嵌入的聊天页面 HTML。
@@ -125,6 +140,40 @@ func chatHandler(
 	c.JSON(200, chatResponse{Answer: message.Content})
 }
 
+// newToolCallback 创建只观察 Tool 组件的 Callback，将工具开始/结束事件
+// 发送到 toolEvents channel。非阻塞发送：channel 满时丢弃事件，避免阻塞
+// Eino 执行流水线。
+func newToolCallback(toolEvents chan<- toolEvent) callbacks.Handler {
+	return callbacks.NewHandlerBuilder().
+		OnStartFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackInput,
+		) context.Context {
+			if info.Component == components.ComponentOfTool {
+				select {
+				case toolEvents <- toolEvent{Type: "start", Name: info.Name}:
+				default:
+				}
+			}
+			return ctx
+		}).
+		OnEndFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackOutput,
+		) context.Context {
+			if info.Component == components.ComponentOfTool {
+				select {
+				case toolEvents <- toolEvent{Type: "end", Name: info.Name}:
+				default:
+				}
+			}
+			return ctx
+		}).
+		Build()
+}
+
 // streamChatHandler 以 SSE 协议推送 Agent 的增量回答。
 // 请求解析阶段失败时返回普通 JSON 错误；一旦 sse.NewWriter 创建成功，
 // 后续所有结果（包括错误）都必须通过 SSE 事件推送，不能再调用 c.JSON。
@@ -146,6 +195,12 @@ func streamChatHandler(
 		return
 	}
 
+	// toolEvents 是 Callback 与 SSE handler 之间的桥梁。
+	// Callback 运行在 Eino 内部 goroutine 中，无法直接写 SSE，
+	// 所以通过 channel 把工具事件传递给 handler 的 select 循环。
+	toolEvents := make(chan toolEvent, 16)
+	toolCallback := newToolCallback(toolEvents)
+
 	// Stream 启动失败时还未写入 SSE，可以返回普通 JSON 502。
 	stream, err := reactAgent.Stream(
 		ctx,
@@ -153,6 +208,9 @@ func streamChatHandler(
 			schema.SystemMessage(systemPrompt),
 			schema.UserMessage(input.Message),
 		},
+		agent.WithComposeOptions(
+			compose.WithCallbacks(toolCallback),
+		),
 	)
 	if err != nil {
 		log.Printf("execute HTTP chat stream: %v", err)
@@ -165,32 +223,64 @@ func streamChatHandler(
 	// sse.NewWriter 自动设置 Content-Type: text/event-stream 并接管响应写入。
 	writer := sse.NewWriter(c)
 
+	// stream.Recv() 是阻塞调用，不能直接放在 select 里。
+	// 用 goroutine 把 Recv 结果转发到 chunkCh，这样 select 可以同时
+	// 监听工具事件和文本 chunk。
+	chunkCh := make(chan chunkResult)
+	go func() {
+		defer close(chunkCh)
+		for {
+			chunk, err := stream.Recv()
+			chunkCh <- chunkResult{chunk: chunk, err: err}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	// 事件类型约定：
 	//   "chunk" → {"content": "增量文本"}
 	//   "done"  → {}（流正常结束）
 	//   "error" → {"error": "错误信息"}（流中断）
 	for {
-		chunk, err := stream.Recv()
-		if errors.Is(err, io.EOF) {
-			writer.WriteEvent("", "done", []byte("{}"))
-			return
-		}
-		if err != nil {
-			log.Printf("receive chat stream: %v", err)
-			writer.WriteEvent("", "error", []byte(`{"error":"stream interrupted"}`))
-			return
-		}
-		if chunk == nil {
-			continue
-		}
+		select {
+		case evt, ok := <-toolEvents:
+			if !ok {
+				continue
+			}
+			data, _ := json.Marshal(map[string]string{"name": evt.Name})
+			if evt.Type == "start" {
+				writer.WriteEvent("", "tool_start", data)
+			} else {
+				writer.WriteEvent("", "tool_end", data)
+			}
 
-		data, err := json.Marshal(chunkEvent{Content: chunk.Content})
-		if err != nil {
-			log.Printf("marshal chunk event: %v", err)
-			continue
+		case result, ok := <-chunkCh:
+			if !ok {
+				// chunkCh 关闭意味着 goroutine 已退出（流结束或出错）
+				writer.WriteEvent("", "done", []byte("{}"))
+				return
+			}
+			if errors.Is(result.err, io.EOF) {
+				// 注意：EOF 是通过 chunkResult.err 传递的，
+				// goroutine 发送 EOF 后会关闭 chunkCh，下一轮 select 会走到 !ok 分支
+				continue
+			}
+			if result.err != nil {
+				log.Printf("receive chat stream: %v", result.err)
+				writer.WriteEvent("", "error", []byte(`{"error":"stream interrupted"}`))
+				return
+			}
+			if result.chunk == nil {
+				continue
+			}
+			data, err := json.Marshal(chunkEvent{Content: result.chunk.Content})
+			if err != nil {
+				log.Printf("marshal chunk event: %v", err)
+				continue
+			}
+			writer.WriteEvent("", "chunk", data)
 		}
-
-		writer.WriteEvent("", "chunk", data)
 	}
 }
 

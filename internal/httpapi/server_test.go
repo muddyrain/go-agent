@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components"
 	"github.com/cloudwego/eino/flow/agent"
 	"github.com/cloudwego/eino/schema"
 	"github.com/cloudwego/hertz/pkg/app"
@@ -146,6 +148,65 @@ func postJSONAndRead(
 	}
 
 	return resp.StatusCode, string(respBody)
+}
+
+// --- Callback 工具事件测试 ---
+
+func TestNewToolCallbackSendsStartAndEnd(t *testing.T) {
+	toolEvents := make(chan toolEvent, 4)
+	cb := newToolCallback(toolEvents)
+
+	// Tool 组件开始 → 应收到 start 事件
+	cb.OnStart(context.Background(), &callbacks.RunInfo{
+		Component: components.ComponentOfTool,
+		Name:      "calculator__add_numbers",
+	}, nil)
+
+	select {
+	case evt := <-toolEvents:
+		if evt.Type != "start" || evt.Name != "calculator__add_numbers" {
+			t.Fatalf("got %+v, want start/calculator__add_numbers", evt)
+		}
+	default:
+		t.Fatal("expected start event, got none")
+	}
+
+	// Tool 组件结束 → 应收到 end 事件
+	cb.OnEnd(context.Background(), &callbacks.RunInfo{
+		Component: components.ComponentOfTool,
+		Name:      "calculator__add_numbers",
+	}, nil)
+
+	select {
+	case evt := <-toolEvents:
+		if evt.Type != "end" || evt.Name != "calculator__add_numbers" {
+			t.Fatalf("got %+v, want end/calculator__add_numbers", evt)
+		}
+	default:
+		t.Fatal("expected end event, got none")
+	}
+}
+
+func TestNewToolCallbackIgnoresNonToolComponents(t *testing.T) {
+	toolEvents := make(chan toolEvent, 4)
+	cb := newToolCallback(toolEvents)
+
+	// ChatModel 组件开始/结束 → 不应发送任何事件
+	cb.OnStart(context.Background(), &callbacks.RunInfo{
+		Component: components.ComponentOfChatModel,
+		Name:      "gpt-4",
+	}, nil)
+	cb.OnEnd(context.Background(), &callbacks.RunInfo{
+		Component: components.ComponentOfChatModel,
+		Name:      "gpt-4",
+	}, nil)
+
+	select {
+	case evt := <-toolEvents:
+		t.Fatalf("unexpected event for non-tool component: %+v", evt)
+	default:
+		// 预期没有事件
+	}
 }
 
 // --- 静态页面路由测试（内存测试）---
