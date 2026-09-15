@@ -1,12 +1,20 @@
 package httpapi
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"sync"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
+)
+
+// 默认会话过期时间与清理间隔。
+// 会话 30 分钟无访问则过期；每 5 分钟检查一次。
+const (
+	defaultSessionTTL      = 30 * time.Minute
+	defaultCleanupInterval = 5 * time.Minute
 )
 
 // Session 表示一个对话会话，持有该会话的历史消息。
@@ -22,17 +30,21 @@ type Session struct {
 // 使用 sync.Mutex 保证 map 的并发安全：HTTP server 每个请求在独立
 // goroutine 中运行，多个请求可能同时读写同一个 session。
 type SessionManager struct {
-	mu         sync.Mutex
-	sessions   map[string]*Session
-	maxHistory int // 每个 session 最多保留的消息条数
+	mu              sync.Mutex
+	sessions        map[string]*Session
+	maxHistory      int // 每个 session 最多保留的消息条数
+	ttl             time.Duration
+	cleanupInterval time.Duration
 }
 
 // NewSessionManager 创建会话管理器。
 // maxHistory 为每个会话保留的最大消息条数；超过时截断最旧的消息。
 func NewSessionManager(maxHistory int) *SessionManager {
 	return &SessionManager{
-		sessions:   make(map[string]*Session),
-		maxHistory: maxHistory,
+		sessions:        make(map[string]*Session),
+		maxHistory:      maxHistory,
+		ttl:             defaultSessionTTL,
+		cleanupInterval: defaultCleanupInterval,
 	}
 }
 
@@ -101,4 +113,36 @@ func (sm *SessionManager) Append(id string, userMsg, assistantMsg *schema.Messag
 		s.History = s.History[len(s.History)-sm.maxHistory:]
 	}
 	s.LastAccess = time.Now()
+}
+
+// StartCleanup 启动后台 goroutine，定期清理过期会话。
+// ctx 被取消时 goroutine 自动退出；调用方应在服务关闭时 cancel ctx。
+func (sm *SessionManager) StartCleanup(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(sm.cleanupInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				sm.cleanupExpired()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
+// cleanupExpired 删除所有超过 ttl 未访问的会话。
+// 遍历 + 删除都在锁内完成；session 数量不大时锁持有时间可忽略。
+func (sm *SessionManager) cleanupExpired() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	now := time.Now()
+	for id, s := range sm.sessions {
+		if now.Sub(s.LastAccess) > sm.ttl {
+			delete(sm.sessions, id)
+		}
+	}
 }

@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.5 已掌握，下一节 E.6 会话过期清理与并发安全 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.6 已掌握，下一节 E.7 优雅关闭与信号处理 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.5 已完成；HTTP 层实现会话历史与多轮对话，SessionManager 封装并发安全的内存会话存储，前端通过 localStorage 持久化 session_id。下一节 E.6 会话过期清理与并发安全加固。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.5**
+- 当前路线决策：**E.6 已完成；SessionManager 新增后台 goroutine 定期清理过期会话，并发安全通过 race detector 验证。下一节 E.7 优雅关闭与信号处理。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.6**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -390,13 +390,19 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.5 可见结果：curl 验证两轮对话携带相同 session_id，第二轮 Agent 收到的消息包含第一轮历史；浏览器验证多轮对话记忆、新对话重置、页面刷新后会话保持
 - E.5 测试：新增 `session_test.go`（12 个单元测试覆盖创建、获取、副本隔离、截断、ID 格式、唯一性等）；新增 `TestChatHandlerMultiTurnPreservesHistory`（验证第二轮消息包含第一轮历史）、`TestChatHandlerNewSessionWithoutID`、`TestStreamChatHandlerDoneEventIncludesSessionID`；更新旧测试断言以适配新增 session_id 字段
 - E.5 理解验收：能说明为什么需要独立 SessionManager（map 并发不安全、逻辑封装）、GetHistory 返回副本的原因（防止数据竞争）、maxHistory 截断的设计（内存上限）、crypto/rand vs math/rand 的区别、流式接口累积完整回答后再存历史的原因、前端 localStorage 持久化的作用
-- 下一节：**E.6 会话过期清理与并发安全加固**
-- 下一节只做：后台 goroutine 定期清理过期 session（基于 LastAccess）；SessionManager 方法并发安全审计与压力测试；不做持久化、多租户、会话列表
-- 下一节明确不做：数据库持久化、Redis、用户认证、会话列表 UI、消息编辑/删除
+- E.6 过期清理：SessionManager 新增 `ttl`（默认 30 分钟）和 `cleanupInterval`（默认 5 分钟）字段；`StartCleanup(ctx)` 启动后台 goroutine，用 `time.NewTicker` 定期触发 `cleanupExpired()`，用 `ctx.Done()` 控制退出
+- E.6 cleanupExpired：加锁遍历所有 session，`now.Sub(s.LastAccess) > sm.ttl` 的 session 用 `delete()` 删除；遍历+删除都在锁内完成，session 数量不大时锁持有时间可忽略
+- E.6 并发安全：所有公共方法（GetOrCreate、GetHistory、Append、cleanupExpired）均正确加锁；`go test -race` 运行全部测试无数据竞争报警
+- E.6 并发测试：`TestSessionManagerConcurrentAccess` 启动 10 个 goroutine 各循环 100 次并发读写同一 session，验证 maxHistory 截断正确；`TestSessionManagerCleanupExpired` 手动设置 LastAccess 为过去时间验证清理；`TestSessionManagerStartCleanup` 用短 TTL 验证后台 goroutine 自动清理；`TestSessionManagerStartCleanupStopsOnCancel` 验证 context 取消后 goroutine 退出
+- E.6 main.go 接入：创建 SessionManager 后立即调用 `sessionManager.StartCleanup(ctx)`，用 run() 的 ctx 作为父 context，服务退出时 goroutine 自动退出
+- E.6 理解验收：能说明 time.NewTicker 的工作原理（内部 goroutine 定时往 channel 发值）、select 阻塞不消耗 CPU（goroutine 被 runtime 挂起，channel 就绪时唤醒）、channel 缓冲的作用（削峰，生产者不用等消费者）、goroutine 与 JS Web Worker 的区别（M:N 调度、轻量、共享内存）、context 控制 goroutine 生命周期的模式
+- 下一节：**E.7 优雅关闭与信号处理**
+- 下一节只做：监听 SIGINT/SIGTERM 信号，触发 Hertz 优雅关闭（Shutdown），等待进行中的请求完成，关闭 MCP 连接和清理 goroutine；不做请求队列、限流、健康检查
+- 下一节明确不做：Kubernetes 探针、请求限流、熔断、服务发现、配置热更新
 
 ## 9. 下一节理解验收题
 
-E.5 的集中理解验收已通过：学习者能够说明为什么需要独立 SessionManager（map 并发不安全、逻辑封装）、GetHistory 返回副本的原因（防止数据竞争）、maxHistory 截断的设计（内存上限）、crypto/rand vs math/rand 的区别、流式接口累积完整回答后再存历史的原因，以及前端 localStorage 持久化的作用。
+E.6 的集中理解验收已通过：学习者能够说明 time.NewTicker 的工作原理（内部 goroutine 定时往 channel 发值）、select 阻塞不消耗 CPU（goroutine 被 runtime 挂起，channel 就绪时唤醒）、channel 缓冲的作用（削峰，生产者不用等消费者）、goroutine 与 JS Web Worker 的区别（M:N 调度、轻量、共享内存），以及 context 控制 goroutine 生命周期的模式。
 
 ## 10. 历史路线处理
 
