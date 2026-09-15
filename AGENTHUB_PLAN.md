@@ -170,7 +170,7 @@ usage: input=0 output=0 total=0
 | Phase B：Eino 对照实验 | 继续手写会重复建设，直接换框架又会形成黑盒 | 用 Eino 重做同一用例并完成概念对照 | 冻结自研内核，生产主线切到 Eino | 已完成 |
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
-| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 进行中：E.1—E.6 已掌握，下一节 E.7 优雅关闭与信号处理 |
+| Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase E：HTTP 与 Web Playground**
-- 当前路线决策：**E.6 已完成；SessionManager 新增后台 goroutine 定期清理过期会话，并发安全通过 race detector 验证。下一节 E.7 优雅关闭与信号处理。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.6**
+- 当前阶段：**Phase E：HTTP 与 Web Playground（已完成）**
+- 当前路线决策：**E.7 已完成；signal.NotifyContext 监听 SIGINT/SIGTERM 转换为 context 取消，Hertz SetCustomSignalWaiter 统一监听 ctx.Done() 触发优雅关闭，资源清理顺序为 HTTP Shutdown → MCP Close → 清理 goroutine 退出。Phase E 收口，下一节进入 Phase F。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -396,13 +396,19 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.6 并发测试：`TestSessionManagerConcurrentAccess` 启动 10 个 goroutine 各循环 100 次并发读写同一 session，验证 maxHistory 截断正确；`TestSessionManagerCleanupExpired` 手动设置 LastAccess 为过去时间验证清理；`TestSessionManagerStartCleanup` 用短 TTL 验证后台 goroutine 自动清理；`TestSessionManagerStartCleanupStopsOnCancel` 验证 context 取消后 goroutine 退出
 - E.6 main.go 接入：创建 SessionManager 后立即调用 `sessionManager.StartCleanup(ctx)`，用 run() 的 ctx 作为父 context，服务退出时 goroutine 自动退出
 - E.6 理解验收：能说明 time.NewTicker 的工作原理（内部 goroutine 定时往 channel 发值）、select 阻塞不消耗 CPU（goroutine 被 runtime 挂起，channel 就绪时唤醒）、channel 缓冲的作用（削峰，生产者不用等消费者）、goroutine 与 JS Web Worker 的区别（M:N 调度、轻量、共享内存）、context 控制 goroutine 生命周期的模式
-- 下一节：**E.7 优雅关闭与信号处理**
-- 下一节只做：监听 SIGINT/SIGTERM 信号，触发 Hertz 优雅关闭（Shutdown），等待进行中的请求完成，关闭 MCP 连接和清理 goroutine；不做请求队列、限流、健康检查
-- 下一节明确不做：Kubernetes 探针、请求限流、熔断、服务发现、配置热更新
+- E.7 信号监听：`cmd/agenthub/main.go` 用 `signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)` 监听 Ctrl+C 和 kill 默认信号，收到信号时自动取消返回的 ctx；`defer stop()` 确保函数返回时恢复信号默认处理并释放内部资源
+- E.7 Hertz 优雅关闭：`internal/httpapi/server.go` 的 `Run` 函数新增 `ctx context.Context` 参数，用 `h.SetCustomSignalWaiter` 替换 Hertz 默认信号等待逻辑；自定义函数同时监听 `ctx.Done()`（正常关闭信号）和 `errCh`（服务器内部错误），ctx 取消时返回 nil 触发 Hertz `Shutdown()` 优雅关闭（等待进行中请求完成，最多 5 秒超时），服务器错误时返回 err 触发强制退出
+- E.7 资源清理顺序：收到信号后 ctx 取消 → sessionManager 清理 goroutine 因 `ctx.Done()` 退出 → httpapi.Run 的 SetCustomSignalWaiter 返回 nil → Hertz Shutdown 等待进行中请求完成 → Run 返回 → `defer mcpManager.Close()` 关闭 MCP 连接；HTTP 先于 MCP 关闭，避免进行中的请求因 MCP 连接先关而失败
+- E.7 可见结果：`go run ./cmd/agenthub serve` 启动后按 Ctrl+C，日志依次输出 `shutdown signal received, gracefully stopping HTTP server...` → `Begin graceful shutdown, wait at most 5s` → `Execute OnShutdownHooks finish` → `close MCP servers`；进行中的流式请求在 5 秒超时内未完成时被强制关闭（curl 报 18），这是优雅关闭的正常超时行为
+- E.7 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 20+ 个测试包全部 ok
+- E.7 理解验收：能说明 Unix 信号（SIGINT/SIGTERM/SIGKILL）的区别与可捕获性、signal.NotifyContext 把信号转换为 context 取消的机制、Hertz SetCustomSignalWaiter 返回 nil vs err 的语义（优雅关闭 vs 强制退出）、Shutdown 内部流程（关闭监听器→等待请求→关闭连接）、defer LIFO 执行顺序与资源清理顺序的设计原因、为什么 HTTP 必须先于 MCP 关闭
+- 下一节：**Phase F：会话与配置持久化**
+- 下一节只做：用 PostgreSQL 存储会话历史，实现 Repository 模式，服务重启后会话可恢复；不做多用户隔离、不做配置热更新
+- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户
 
 ## 9. 下一节理解验收题
 
-E.6 的集中理解验收已通过：学习者能够说明 time.NewTicker 的工作原理（内部 goroutine 定时往 channel 发值）、select 阻塞不消耗 CPU（goroutine 被 runtime 挂起，channel 就绪时唤醒）、channel 缓冲的作用（削峰，生产者不用等消费者）、goroutine 与 JS Web Worker 的区别（M:N 调度、轻量、共享内存），以及 context 控制 goroutine 生命周期的模式。
+E.7 的集中理解验收已通过：学习者能够说明 Unix 信号（SIGINT/SIGTERM/SIGKILL）的区别与可捕获性、signal.NotifyContext 把信号转换为 context 取消的机制、Hertz SetCustomSignalWaiter 返回 nil vs err 的语义（优雅关闭 vs 强制退出）、Shutdown 内部流程（关闭监听器→等待请求→关闭连接）、defer LIFO 执行顺序与资源清理顺序的设计原因，以及为什么 HTTP 必须先于 MCP 关闭。
 
 ## 10. 历史路线处理
 

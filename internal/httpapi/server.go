@@ -322,10 +322,31 @@ func Run(
 	reactAgent generator,
 	systemPrompt string,
 	sessionManager *SessionManager,
+	ctx context.Context,
 ) error {
 	log.Printf("HTTP server listening on http://%s", address)
 
 	h := NewServer(reactAgent, systemPrompt, sessionManager)
+
+	// SetCustomSignalWaiter 替换 Hertz 默认的信号等待逻辑。
+	// 默认实现自己监听 SIGINT/SIGTERM；我们改为统一监听 ctx.Done()，
+	// 这样 main.go 的 signal.NotifyContext 收到信号时，所有地方
+	// （清理 goroutine、HTTP 服务器）同时收到取消通知。
+	//
+	// 返回值语义：
+	//   - return nil → Hertz 调用 Shutdown() 优雅关闭（等待进行中请求）
+	//   - return err → Hertz 直接 Close() 强制退出
+	h.SetCustomSignalWaiter(func(errCh chan error) error {
+		select {
+		case <-ctx.Done():
+			log.Printf("shutdown signal received, gracefully stopping HTTP server...")
+			return nil
+		case err := <-errCh:
+			// 服务器内部错误（如端口占用），立即退出
+			return err
+		}
+	})
+
 	h.Spin()
 	return nil
 }

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
@@ -52,6 +54,12 @@ func run() error {
 	}
 	ctx := context.Background()
 
+	// signal.NotifyContext 监听 SIGINT（Ctrl+C）和 SIGTERM（kill 默认），
+	// 收到信号时自动取消返回的 ctx。所有监听 ctx.Done() 的地方
+	// （清理 goroutine、HTTP 信号等待器）会同时收到取消通知。
+	// stop() 恢复信号默认处理并释放内部资源，defer 确保一定调用。
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 	chatModel, err := newOpenAIChatModelFromEnv(ctx)
 	if err != nil {
 		return err
@@ -166,6 +174,7 @@ func run() error {
 			reactAgent,
 			systemPrompt,
 			sessionManager,
+			ctx,
 		)
 	}
 
