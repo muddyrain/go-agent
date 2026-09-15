@@ -4,10 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"sync"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // 默认会话过期时间与清理间隔。
@@ -19,29 +25,26 @@ const (
 
 // Session 表示一个对话会话，持有该会话的历史消息。
 // History 只在 SessionManager 的方法内被修改，外部通过 GetHistory
-// 拿到副本，避免并发读写。
 type Session struct {
 	ID         string
 	History    []*schema.Message
 	LastAccess time.Time
 }
 
-// SessionManager 管理所有会话的创建、历史读取与追加。
-// 使用 sync.Mutex 保证 map 的并发安全：HTTP server 每个请求在独立
-// goroutine 中运行，多个请求可能同时读写同一个 session。
+// SessionManager 管理持久化到 PostgreSQL 的会话存储。
+// 并发安全由数据库事务和行锁保证，不需要应用层 mutex。
 type SessionManager struct {
-	mu              sync.Mutex
-	sessions        map[string]*Session
+	db              *pgxpool.Pool
 	maxHistory      int // 每个 session 最多保留的消息条数
 	ttl             time.Duration
 	cleanupInterval time.Duration
 }
 
 // NewSessionManager 创建会话管理器。
-// maxHistory 为每个会话保留的最大消息条数；超过时截断最旧的消息。
-func NewSessionManager(maxHistory int) *SessionManager {
+// db 是已建立的 PostgreSQL 连接池；maxHistory 限制每个会话保留的消息条数。
+func NewSessionManager(db *pgxpool.Pool, maxHistory int) *SessionManager {
 	return &SessionManager{
-		sessions:        make(map[string]*Session),
+		db:              db,
 		maxHistory:      maxHistory,
 		ttl:             defaultSessionTTL,
 		cleanupInterval: defaultCleanupInterval,
@@ -57,62 +60,146 @@ func generateSessionID() string {
 }
 
 // GetOrCreate 根据 ID 获取会话；ID 为空或不存在时创建新会话。
-// 调用方拿到的是 *Session 指针，但不应直接修改 History 字段，
-// 应通过 Append 方法追加。
+// 返回的 Session 只包含 ID 和元数据，历史消息通过 GetHistory 单独获取。
 func (sm *SessionManager) GetOrCreate(id string) *Session {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
+	id = strings.TrimSpace(id)
 
 	if id != "" {
-		if s, ok := sm.sessions[id]; ok {
-			s.LastAccess = time.Now()
-			return s
+		var lastAccess time.Time
+
+		err := sm.db.QueryRow(context.Background(), `
+			SELECT last_access FROM sessions WHERE id = $1
+		`, id).Scan(&lastAccess)
+
+		if err == nil {
+			// 会话存在，更新最后访问时间
+			sm.touchSession(id)
+			return &Session{ID: id, LastAccess: lastAccess}
+		}
+
+		if !errors.Is(err, pgx.ErrNoRows) {
+			// 数据库出错，记录日志但降级为创建新会话，避免阻塞用户请求
+			log.Printf("get session %q: %v", id, err)
 		}
 	}
-	newID := generateSessionID()
-	s := &Session{
-		ID:         newID,
-		History:    nil,
-		LastAccess: time.Now(),
+
+	// 创建新会话：crypto/rand 生成 16 字节随机数，hex 编码为 32 字符
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		// rand.Read 失败极罕见，降级用时间戳保证不崩溃
+		id = fmt.Sprintf("fallback-%d", time.Now().UnixNano())
+	} else {
+		id = hex.EncodeToString(buf)
 	}
-	sm.sessions[newID] = s
-	return s
+
+	_, err := sm.db.Exec(context.Background(), `
+		INSERT INTO sessions (id, last_access) VALUES ($1, NOW())
+	`, id)
+	if err != nil {
+		log.Printf("create session %q: %v", id, err)
+	}
+
+	return &Session{ID: id, LastAccess: time.Now()}
 }
 
-// GetHistory 返回指定会话的历史消息副本。
-// 返回副本是为了防止调用方修改内部切片导致数据竞争。
+// touchSession 更新会话的最后访问时间。
+func (sm *SessionManager) touchSession(id string) {
+	_, err := sm.db.Exec(context.Background(), `
+		UPDATE sessions SET last_access = NOW() WHERE id = $1
+	`, id)
+	if err != nil {
+		log.Printf("touch session %q: %v", id, err)
+	}
+}
+
+// GetHistory 返回指定会话的消息历史。
+// 按 created_at 升序排列，最多返回 maxHistory 条。
 func (sm *SessionManager) GetHistory(id string) []*schema.Message {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	s, ok := sm.sessions[id]
-	if !ok {
-		return nil
+	// 子查询先倒序取最新的 N 条，外层再正序排列，保证时间顺序
+	rows, err := sm.db.Query(context.Background(), `
+		SELECT message_json
+		FROM (
+			SELECT message_json, created_at
+			FROM messages
+			WHERE session_id = $1
+			ORDER BY created_at DESC
+			LIMIT $2
+		) recent
+		ORDER BY created_at ASC
+	`, id, sm.maxHistory)
+	if err != nil {
+		log.Printf("query history for session %q: %v", id, err)
+		return []*schema.Message{}
 	}
-	// 复制切片头部，Message 指针本身不复制（只读使用）
-	history := make([]*schema.Message, len(s.History))
-	copy(history, s.History)
-	return history
+	defer rows.Close()
+
+	var messages []*schema.Message
+	for rows.Next() {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
+			log.Printf("scan message for session %q: %v", id, err)
+			continue
+		}
+
+		var msg schema.Message
+		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("unmarshal message for session %q: %v", id, err)
+			continue
+		}
+		messages = append(messages, &msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("iterate history for session %q: %v", id, err)
+	}
+
+	return messages
 }
 
-// Append 向指定会话追加一轮对话（用户消息 + 助手消息）。
-// 超过 maxHistory 时截断最旧的消息，保留最近的 maxHistory 条。
+// Append 向会话追加一轮对话（用户消息 + 助手消息）。
+// 用事务保证两条消息要么都写入，要么都不写入。
 func (sm *SessionManager) Append(id string, userMsg, assistantMsg *schema.Message) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
+	tx, err := sm.db.Begin(context.Background())
+	if err != nil {
+		log.Printf("begin append transaction for session %q: %v", id, err)
+		return
+	}
+	defer tx.Rollback(context.Background()) // 提交后 Rollback 是 no-op
 
-	s, ok := sm.sessions[id]
-	if !ok {
+	if err := sm.insertMessage(tx, id, userMsg); err != nil {
+		log.Printf("append user message to session %q: %v", id, err)
+		return
+	}
+	if err := sm.insertMessage(tx, id, assistantMsg); err != nil {
+		log.Printf("append assistant message to session %q: %v", id, err)
 		return
 	}
 
-	s.History = append(s.History, userMsg, assistantMsg)
-
-	// 超过上限时截断最旧的消息
-	if len(s.History) > sm.maxHistory {
-		s.History = s.History[len(s.History)-sm.maxHistory:]
+	// 更新最后访问时间
+	if _, err := tx.Exec(context.Background(), `
+		UPDATE sessions SET last_access = NOW() WHERE id = $1
+	`, id); err != nil {
+		log.Printf("touch session in append %q: %v", id, err)
+		return
 	}
-	s.LastAccess = time.Now()
+
+	if err := tx.Commit(context.Background()); err != nil {
+		log.Printf("commit append transaction for session %q: %v", id, err)
+	}
+}
+
+// insertMessage 在事务中插入一条消息。
+func (sm *SessionManager) insertMessage(tx pgx.Tx, sessionID string, msg *schema.Message) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal message: %w", err)
+	}
+
+	_, err = tx.Exec(context.Background(), `
+		INSERT INTO messages (session_id, role, content, message_json)
+		VALUES ($1, $2, $3, $4)
+	`, sessionID, msg.Role, msg.Content, data)
+	return err
 }
 
 // StartCleanup 启动后台 goroutine，定期清理过期会话。
@@ -133,16 +220,18 @@ func (sm *SessionManager) StartCleanup(ctx context.Context) {
 	}()
 }
 
-// cleanupExpired 删除所有超过 ttl 未访问的会话。
-// 遍历 + 删除都在锁内完成；session 数量不大时锁持有时间可忽略。
+// cleanupExpired 删除超过 TTL 未访问的会话。
+// ON DELETE CASCADE 会自动删除关联的消息。
 func (sm *SessionManager) cleanupExpired() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
+	tag, err := sm.db.Exec(context.Background(), `
+		DELETE FROM sessions WHERE last_access < NOW() - $1::interval
+	`, sm.ttl.String())
 
-	now := time.Now()
-	for id, s := range sm.sessions {
-		if now.Sub(s.LastAccess) > sm.ttl {
-			delete(sm.sessions, id)
-		}
+	if err != nil {
+		log.Printf("cleanup expired sessions: %v", err)
+		return
+	}
+	if tag.RowsAffected() > 0 {
+		log.Printf("cleaned up %d expired sessions", tag.RowsAffected())
 	}
 }

@@ -12,10 +12,12 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 const (
@@ -166,8 +168,32 @@ func run() error {
 		"不要在工具调用前输出计划或说明文字。" +
 		"如果回答不依赖项目文件，则直接回答，不要调用工具。"
 
-	sessionManager := httpapi.NewSessionManager(20) // 每个会话保留最近 20 条消息
-	sessionManager.StartCleanup(ctx)                // 启动会话过期清理后台 goroutine
+		// PostgreSQL 连接池：会话历史持久化存储。
+	// 本地开发通过 Unix socket 连接（postgres:/// 三个斜杠），不需要密码；
+	// sslmode=disable 因为本地不需要 TLS。生产环境应从环境变量读取连接字符串。
+	dbPool, err := pgxpool.New(ctx, "postgres:///agenthub?sslmode=disable")
+	if err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+	defer dbPool.Close()
+
+	if err := dbPool.Ping(ctx); err != nil {
+		return fmt.Errorf("ping database: %w", err)
+	}
+
+	// 执行 schema.sql 初始化表结构。
+	// CREATE TABLE IF NOT EXISTS 保证重复执行不会报错。
+	schemaPath := filepath.Join("configs", "schema.sql")
+	schemaSQL, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return fmt.Errorf("read schema %s: %w", schemaPath, err)
+	}
+	if _, err := dbPool.Exec(ctx, string(schemaSQL)); err != nil {
+		return fmt.Errorf("apply schema: %w", err)
+	}
+
+	sessionManager := httpapi.NewSessionManager(dbPool, 20) // 每个会话保留最近 20 条消息
+	sessionManager.StartCleanup(ctx)                        // 启动会话过期清理后台 goroutine
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
 		return httpapi.Run(

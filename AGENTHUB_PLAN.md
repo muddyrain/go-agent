@@ -171,7 +171,7 @@ usage: input=0 output=0 total=0
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
-| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 待开始 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1 已掌握，下一节 F.2 数据库迁移与连接池配置 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase E：HTTP 与 Web Playground（已完成）**
-- 当前路线决策：**E.7 已完成；signal.NotifyContext 监听 SIGINT/SIGTERM 转换为 context 取消，Hertz SetCustomSignalWaiter 统一监听 ctx.Done() 触发优雅关闭，资源清理顺序为 HTTP Shutdown → MCP Close → 清理 goroutine 退出。Phase E 收口，下一节进入 Phase F。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7**
+- 当前阶段：**Phase F：会话与配置持久化**
+- 当前路线决策：**F.1 已完成；SessionManager 从内存 map 迁移到 PostgreSQL，sessions/messages 两张表，message_json 存储完整 schema.Message 序列化，Append 用事务保证一致性，服务重启后会话历史可恢复。下一节 F.2 数据库迁移与连接池配置。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -402,13 +402,20 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - E.7 可见结果：`go run ./cmd/agenthub serve` 启动后按 Ctrl+C，日志依次输出 `shutdown signal received, gracefully stopping HTTP server...` → `Begin graceful shutdown, wait at most 5s` → `Execute OnShutdownHooks finish` → `close MCP servers`；进行中的流式请求在 5 秒超时内未完成时被强制关闭（curl 报 18），这是优雅关闭的正常超时行为
 - E.7 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 20+ 个测试包全部 ok
 - E.7 理解验收：能说明 Unix 信号（SIGINT/SIGTERM/SIGKILL）的区别与可捕获性、signal.NotifyContext 把信号转换为 context 取消的机制、Hertz SetCustomSignalWaiter 返回 nil vs err 的语义（优雅关闭 vs 强制退出）、Shutdown 内部流程（关闭监听器→等待请求→关闭连接）、defer LIFO 执行顺序与资源清理顺序的设计原因、为什么 HTTP 必须先于 MCP 关闭
-- 下一节：**Phase F：会话与配置持久化**
-- 下一节只做：用 PostgreSQL 存储会话历史，实现 Repository 模式，服务重启后会话可恢复；不做多用户隔离、不做配置热更新
-- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户
+- F.1 数据模型：从当前 Session 结构反推两张表——`sessions`（id/last_access/created_at）和 `messages`（id/session_id/role/content/message_json/created_at）；`message_json` 存储完整 schema.Message 序列化，role/content 单独存便于调试；`ON DELETE CASCADE` 删除 session 时自动删消息；`TIMESTAMPTZ` 带时区避免时区问题
+- F.1 PostgreSQL 接入：`cmd/agenthub/main.go` 用 `pgxpool.New` 创建连接池（本地 Unix socket 连接 `postgres:///agenthub?sslmode=disable`，peer authentication 用当前系统用户作为数据库用户，不需要密码），`dbPool.Ping` 健康检查，读取 `configs/schema.sql` 执行 `CREATE TABLE IF NOT EXISTS` 初始化表，`defer dbPool.Close()` 释放连接池
+- F.1 SessionManager 改造：`internal/httpapi/session.go` 从内存 map 迁移到 PostgreSQL；删除 `sessions map` 和 `sync.Mutex`（数据库自己处理并发），新增 `db *pgxpool.Pool` 字段；`GetOrCreate` 用 `QueryRow` + `pgx.ErrNoRows` 判断会话是否存在，不存在则 `Exec` INSERT；`GetHistory` 用 `Query` + `rows.Next/Scan` 查询消息，子查询先 DESC 取最新 N 条再 ASC 排列，`json.Unmarshal` 反序列化 message_json；`Append` 用 `db.Begin` 事务保证用户消息和助手消息要么都写入要么都不写入，`defer tx.Rollback` + `tx.Commit` 标准模式；`cleanupExpired` 用 `Exec` DELETE + `NOW() - $1::interval`，`tag.RowsAffected()` 获取删除行数
+- F.1 测试：新建 `internal/httpapi/testdb_test.go` 提供 `getTestDB(t)`（连接 `agenthub_test` 数据库，不可用时 `t.Skip`）和 `cleanupTestDB(t, db)`（TRUNCATE CASCADE 清空表）；重写 `session_test.go` 适配 PostgreSQL 版本（删除访问已删除内部字段的测试，用 SQL 直接更新 last_access 测试过期清理）；更新 `server_test.go` 所有 `NewSessionManager(20)` 为 `NewSessionManager(getTestDB(t), 20)`
+- F.1 可见结果：发消息后 `psql -d agenthub -c "SELECT * FROM sessions;"` 和 `SELECT * FROM messages;` 能看到数据；重启服务后用相同 session_id 继续聊天，模型能记住之前的对话（如"我叫小明"→"我叫什么名字"→"你叫小明"）
+- F.1 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok；httpapi 包 20+ 个测试全部通过（含并发测试、过期清理测试、多轮对话测试）
+- F.1 理解验收：能说明连接池的作用（复用 TCP 连接、降低开销）、pgx 三种执行方式的区别（Query 多行/QueryRow 单行/Exec 不返回行）、`$1` 参数占位符防 SQL 注入、`pgx.ErrNoRows` 判断查询不到行、`rows.Next/Scan/Err` 迭代模式、事务的 ACID 含义和 `defer Rollback + Commit` 标准模式、`message_json` 存储完整 Message 的设计原因（避免拆字段、Eino 升级时不改表）、本地 Unix socket 连接不需要密码的原因（peer authentication）
+- 下一节：**F.2 数据库迁移与连接池配置**
+- 下一节只做：引入版本化迁移工具（golang-migrate），连接池配置（最大连接数、连接生命周期、健康检查），数据库错误分类与重试；不做多数据源、读写分离
+- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户、读写分离
 
 ## 9. 下一节理解验收题
 
-E.7 的集中理解验收已通过：学习者能够说明 Unix 信号（SIGINT/SIGTERM/SIGKILL）的区别与可捕获性、signal.NotifyContext 把信号转换为 context 取消的机制、Hertz SetCustomSignalWaiter 返回 nil vs err 的语义（优雅关闭 vs 强制退出）、Shutdown 内部流程（关闭监听器→等待请求→关闭连接）、defer LIFO 执行顺序与资源清理顺序的设计原因，以及为什么 HTTP 必须先于 MCP 关闭。
+F.1 的集中理解验收已通过：学习者能够说明连接池的作用（复用 TCP 连接、降低开销）、pgx 三种执行方式的区别（Query 多行/QueryRow 单行/Exec 不返回行）、`$1` 参数占位符防 SQL 注入、`pgx.ErrNoRows` 判断查询不到行、`rows.Next/Scan/Err` 迭代模式、事务的 ACID 含义和 `defer Rollback + Commit` 标准模式、`message_json` 存储完整 Message 的设计原因（避免拆字段、Eino 升级时不改表），以及本地 Unix socket 连接不需要密码的原因（peer authentication）。
 
 ## 10. 历史路线处理
 
