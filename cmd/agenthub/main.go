@@ -202,8 +202,9 @@ func run() error {
 		return fmt.Errorf("run database migrations: %w", err)
 	}
 
-	sessionManager := httpapi.NewSessionManager(dbPool, 20) // 每个会话保留最近 20 条消息
-	sessionManager.StartCleanup(ctx)                        // 启动会话过期清理后台 goroutine
+	repo := httpapi.NewPostgresSessionRepository(dbPool)
+	sessionManager := httpapi.NewSessionManager(repo, 20) // 每个会话保留最近 20 条消息
+	sessionManager.StartCleanup(ctx)                      // 启动会话过期清理后台 goroutine
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
 		return httpapi.Run(

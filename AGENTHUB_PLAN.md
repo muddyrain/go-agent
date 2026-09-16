@@ -171,7 +171,7 @@ usage: input=0 output=0 total=0
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
-| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.2 已掌握，下一节 F.3 Repository 模式与事务边界 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.3 已掌握，下一节 F.4 配置管理与环境隔离 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase F：会话与配置持久化**
-- 当前路线决策：**F.2 已完成；引入 golang-migrate 版本化迁移（up/down 文件、schema_migrations 版本表、服务启动自动迁移），pgx 连接池配置（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod），数据库错误分类与指数退避重试（区分可重试错误 08006/40001/40P01 和不可重试错误 23505/23503）。下一节 F.3 Repository 模式与事务边界。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.2**
+- 当前路线决策：**F.3 已完成；引入 SessionRepository 接口抽象数据访问层，PostgresSessionRepository 实现（SQL 操作集中管理），MemorySessionRepository 实现（测试用内存存储，不需要真实数据库），SessionManager 改为依赖接口（业务逻辑与数据访问分离），事务边界明确（AppendMessages 在 Repository 内部用事务保证多条消息原子性），业务逻辑测试改用内存实现速度更快。下一节 F.4 配置管理与环境隔离。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -415,13 +415,22 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - F.2 可见结果：`migrate -path configs/migrations -database postgres:///agenthub up` 执行迁移，`migrate version` 显示当前版本 1，`psql -d agenthub -c "\dt"` 能看到 sessions/messages/schema_migrations 三张表；删除表后启动服务自动重建表；`migrate down 1` 回滚后表被删除
 - F.2 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
 - F.2 理解验收：能说明版本化迁移的必要性（表结构变更需要版本管理、多环境一致性、可回滚）、up.sql/down.sql 的作用、schema_migrations 表记录版本的机制、自动迁移的触发时机（服务启动时）、连接池各参数的作用（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod）、为什么需要错误分类（可重试 vs 不可重试）、指数退避的原理（等待时间递增避免雪崩）、为什么已执行的迁移文件不能修改（其他环境已记录版本，修改后不会重新执行导致不一致）
-- 下一节：**F.3 Repository 模式与事务边界**
-- 下一节只做：引入 Repository 接口隔离数据访问层，SessionRepository 接口 + PostgreSQL 实现，事务边界明确（哪些操作需要事务、事务粒度），测试用内存实现或 mock；不做多数据源、读写分离、分布式事务
-- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户、读写分离、分布式事务
+- F.3 Repository 接口：`internal/httpapi/repository.go` 定义 `SessionRepository` 接口，包含 `GetSession`/`CreateSession`/`TouchSession`/`GetMessages`/`AppendMessages`/`DeleteExpired` 六个方法；接口方法由业务需求定义（如 `AppendMessages` 有业务语义），不是通用 CRUD；上层 `SessionManager` 依赖接口不依赖具体实现，可轻松替换底层存储
+- F.3 PostgreSQL 实现：`internal/httpapi/postgres_repository.go` 实现 `PostgresSessionRepository`，所有 SQL 操作集中在此文件；`AppendMessages` 内部用事务（`db.Begin` + `defer tx.Rollback` + `tx.Commit`）保证多条消息原子性，事务边界在 Repository 内部，上层不需要关心；`GetMessages` 用子查询 DESC LIMIT + 外层 ASC 实现"取最新 N 条并按时间正序排列"
+- F.3 内存实现：`internal/httpapi/repository.go` 中 `MemorySessionRepository` 用 `map[string]*Session` + `map[string][]*memoryMessage` 存储，`sync.Mutex` 保证并发安全；用于单元测试，不需要真实数据库，测试速度更快；`SetLastAccess` 是测试辅助方法，用于模拟过期会话；`GetSession` 不存在时返回 `(nil, nil)`（和 PostgreSQL 的 `pgx.ErrNoRows` 语义一致，由接口封装）
+- F.3 SessionManager 改造：`internal/httpapi/session.go` 中 `SessionManager` 从直接持有 `*pgxpool.Pool` 改为持有 `SessionRepository` 接口；业务逻辑（ID 生成、错误降级、清理调度、maxHistory 限制）保留，数据访问全部委托给 Repository；`GetOrCreate` 适配 Repository 语义（`GetSession` 返回 `(nil, nil)` 表示不存在，不再用 `pgx.ErrNoRows` 判断）；`cmd/agenthub/main.go` 创建 `NewPostgresSessionRepository(dbPool)` 传入 `NewSessionManager`
+- F.3 事务边界：明确哪些操作需要事务——`AppendMessages` 需要（多条消息要么都写入要么都不写入），`GetSession`/`CreateSession`/`TouchSession`/`GetMessages`/`DeleteExpired` 不需要（单条 SQL 数据库内部原子）；事务粒度是"一次 Append 调用"，不是"整个 HTTP 请求"；`TouchSession` 不在 `AppendMessages` 事务内（失败不影响消息已写入，下次 GetOrCreate 会更新）
+- F.3 测试改造：`session_test.go` 业务逻辑测试改用 `MemorySessionRepository`（`TestGetOrCreate`/`TestGetHistory`/`TestAppend`/`TestCleanupExpired` 等），不需要真实数据库；`TestSessionManagerCleanupExpired` 用 `repo.SetLastAccess` 模拟过期会话，用 `repo.GetSession` 验证结果；`server_test.go` 传入 `NewPostgresSessionRepository(getTestDB(t))`（HTTP 集成测试仍用真实数据库验证端到端）
+- F.3 可见结果：业务逻辑测试用内存实现，运行速度从 ~8s 降到 ~1s；`go test ./internal/httpapi/... -run TestSessionManager` 不需要启动数据库；替换 Repository 实现（PostgreSQL → 内存 → 未来 MySQL）不需要改 SessionManager 代码
+- F.3 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
+- F.3 理解验收：能说明 Repository 模式和 ORM 的区别（接口是你定义的，ORM 是框架给的）、依赖倒置的价值（上层依赖接口不依赖实现，可替换可测试）、事务边界的判断标准（多条写操作需要事务，单条 SQL 不需要）、为什么 `GetSession` 不存在时返回 `(nil, nil)` 而不是错误（由接口封装数据库差异，上层不需要知道 pgx.ErrNoRows）、内存实现的价值（测试速度快、不依赖外部服务、可模拟边界情况）、为什么 `TouchSession` 不在 Append 事务内（失败可接受，不影响主流程）
+- 下一节：**F.4 配置管理与环境隔离**
+- 下一节只做：引入配置结构体，从环境变量和配置文件读取（数据库连接串、模型 API Key、HTTP 端口、会话 TTL 等），区分开发/测试/生产环境配置，配置验证（启动时检查必填项）；不做配置热更新、远程配置中心、多租户配置
+- 下一节明确不做：配置热更新、etcd/Consul 远程配置、多租户配置、动态配置下发
 
 ## 9. 下一节理解验收题
 
-F.2 的集中理解验收已通过：学习者能够说明版本化迁移的必要性（表结构变更需要版本管理、多环境一致性、可回滚）、up.sql/down.sql 的作用、schema_migrations 表记录版本的机制、自动迁移的触发时机（服务启动时）、连接池各参数的作用（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod）、为什么需要错误分类（可重试 vs 不可重试）、指数退避的原理（等待时间递增避免雪崩），以及为什么已执行的迁移文件不能修改（其他环境已记录版本，修改后不会重新执行导致不一致）。
+F.3 的集中理解验收已通过：学习者能够说明 Repository 模式和 ORM 的区别（接口是你定义的，ORM 是框架给的）、依赖倒置的价值（上层依赖接口不依赖实现，可替换可测试）、事务边界的判断标准（多条写操作需要事务，单条 SQL 不需要）、为什么 `GetSession` 不存在时返回 `(nil, nil)` 而不是错误（由接口封装数据库差异，上层不需要知道 pgx.ErrNoRows）、内存实现的价值（测试速度快、不依赖外部服务、可模拟边界情况），以及为什么 `TouchSession` 不在 Append 事务内（失败可接受，不影响主流程）。
 
 ## 10. 历史路线处理
 
