@@ -171,7 +171,7 @@ usage: input=0 output=0 total=0
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
-| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1 已掌握，下一节 F.2 数据库迁移与连接池配置 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.2 已掌握，下一节 F.3 Repository 模式与事务边界 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase F：会话与配置持久化**
-- 当前路线决策：**F.1 已完成；SessionManager 从内存 map 迁移到 PostgreSQL，sessions/messages 两张表，message_json 存储完整 schema.Message 序列化，Append 用事务保证一致性，服务重启后会话历史可恢复。下一节 F.2 数据库迁移与连接池配置。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1**
+- 当前路线决策：**F.2 已完成；引入 golang-migrate 版本化迁移（up/down 文件、schema_migrations 版本表、服务启动自动迁移），pgx 连接池配置（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod），数据库错误分类与指数退避重试（区分可重试错误 08006/40001/40P01 和不可重试错误 23505/23503）。下一节 F.3 Repository 模式与事务边界。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.2**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -409,13 +409,19 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - F.1 可见结果：发消息后 `psql -d agenthub -c "SELECT * FROM sessions;"` 和 `SELECT * FROM messages;` 能看到数据；重启服务后用相同 session_id 继续聊天，模型能记住之前的对话（如"我叫小明"→"我叫什么名字"→"你叫小明"）
 - F.1 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok；httpapi 包 20+ 个测试全部通过（含并发测试、过期清理测试、多轮对话测试）
 - F.1 理解验收：能说明连接池的作用（复用 TCP 连接、降低开销）、pgx 三种执行方式的区别（Query 多行/QueryRow 单行/Exec 不返回行）、`$1` 参数占位符防 SQL 注入、`pgx.ErrNoRows` 判断查询不到行、`rows.Next/Scan/Err` 迭代模式、事务的 ACID 含义和 `defer Rollback + Commit` 标准模式、`message_json` 存储完整 Message 的设计原因（避免拆字段、Eino 升级时不改表）、本地 Unix socket 连接不需要密码的原因（peer authentication）
-- 下一节：**F.2 数据库迁移与连接池配置**
-- 下一节只做：引入版本化迁移工具（golang-migrate），连接池配置（最大连接数、连接生命周期、健康检查），数据库错误分类与重试；不做多数据源、读写分离
-- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户、读写分离
+- F.2 版本化迁移：引入 golang-migrate，迁移文件按版本号命名（`000001_create_sessions.up.sql` / `.down.sql`），up.sql 正向执行，down.sql 回滚；数据库自动建 `schema_migrations` 表记录当前版本，已执行的迁移不会重复执行；服务启动时调用 `db.MigrateUp()` 自动迁移到最新版本；CLI 工具支持 `migrate up` / `migrate down 1` / `migrate version` / `migrate create`
+- F.2 连接池配置：用 `pgxpool.ParseConfig` + `pgxpool.NewWithConfig` 替代默认配置；`MaxConns=10` 防止把数据库打挂，`MinConns=2` 预热连接避免冷启动，`MaxConnLifetime=30min` 防止连接老化，`MaxConnIdleTime=5min` 释放空闲连接，`HealthCheckPeriod=30s` 定期剔除坏连接
+- F.2 错误分类与重试：`internal/db/retry.go` 实现 `isRetryable()` 区分可重试错误（08006 连接失败、40001 序列化失败、40P01 死锁、57P01 管理员终止、57P03 无法连接）和不可重试错误（23505 唯一约束、23503 外键约束、42601 语法错误）；`Retry()` 函数用指数退避（100ms→200ms→400ms）自动重试可重试错误，最多 attempts 次，ctx 取消时立即返回
+- F.2 可见结果：`migrate -path configs/migrations -database postgres:///agenthub up` 执行迁移，`migrate version` 显示当前版本 1，`psql -d agenthub -c "\dt"` 能看到 sessions/messages/schema_migrations 三张表；删除表后启动服务自动重建表；`migrate down 1` 回滚后表被删除
+- F.2 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
+- F.2 理解验收：能说明版本化迁移的必要性（表结构变更需要版本管理、多环境一致性、可回滚）、up.sql/down.sql 的作用、schema_migrations 表记录版本的机制、自动迁移的触发时机（服务启动时）、连接池各参数的作用（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod）、为什么需要错误分类（可重试 vs 不可重试）、指数退避的原理（等待时间递增避免雪崩）、为什么已执行的迁移文件不能修改（其他环境已记录版本，修改后不会重新执行导致不一致）
+- 下一节：**F.3 Repository 模式与事务边界**
+- 下一节只做：引入 Repository 接口隔离数据访问层，SessionRepository 接口 + PostgreSQL 实现，事务边界明确（哪些操作需要事务、事务粒度），测试用内存实现或 mock；不做多数据源、读写分离、分布式事务
+- 下一节明确不做：Redis 缓存、消息队列、分布式锁、多租户、读写分离、分布式事务
 
 ## 9. 下一节理解验收题
 
-F.1 的集中理解验收已通过：学习者能够说明连接池的作用（复用 TCP 连接、降低开销）、pgx 三种执行方式的区别（Query 多行/QueryRow 单行/Exec 不返回行）、`$1` 参数占位符防 SQL 注入、`pgx.ErrNoRows` 判断查询不到行、`rows.Next/Scan/Err` 迭代模式、事务的 ACID 含义和 `defer Rollback + Commit` 标准模式、`message_json` 存储完整 Message 的设计原因（避免拆字段、Eino 升级时不改表），以及本地 Unix socket 连接不需要密码的原因（peer authentication）。
+F.2 的集中理解验收已通过：学习者能够说明版本化迁移的必要性（表结构变更需要版本管理、多环境一致性、可回滚）、up.sql/down.sql 的作用、schema_migrations 表记录版本的机制、自动迁移的触发时机（服务启动时）、连接池各参数的作用（MaxConns/MinConns/MaxConnLifetime/MaxConnIdleTime/HealthCheckPeriod）、为什么需要错误分类（可重试 vs 不可重试）、指数退避的原理（等待时间递增避免雪崩），以及为什么已执行的迁移文件不能修改（其他环境已记录版本，修改后不会重新执行导致不一致）。
 
 ## 10. 历史路线处理
 

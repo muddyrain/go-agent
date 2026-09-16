@@ -1,12 +1,13 @@
--- sessions：一个会话一行
-CREATE TABLE IF NOT EXISTS sessions (
+-- 000001_create_sessions.up.sql
+-- 正向迁移：创建 sessions 和 messages 表
+
+CREATE TABLE sessions (
     id          TEXT PRIMARY KEY,
     last_access TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- messages：一条消息一行，属于某个 session
-CREATE TABLE IF NOT EXISTS messages (
+CREATE TABLE messages (
     id           BIGSERIAL PRIMARY KEY,
     session_id   TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     role         TEXT NOT NULL,
@@ -15,6 +16,5 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- 按 session_id + created_at 查询时加速
-CREATE INDEX IF NOT EXISTS idx_messages_session_created
+CREATE INDEX idx_messages_session_created
     ON messages(session_id, created_at);

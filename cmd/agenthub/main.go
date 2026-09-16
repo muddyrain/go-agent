@@ -2,6 +2,7 @@ package main
 
 import (
 	"agenthub/internal/cli"
+	"agenthub/internal/db"
 	"agenthub/internal/httpapi"
 	"agenthub/internal/mcpclient"
 	"agenthub/internal/mcpserver"
@@ -14,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
@@ -168,28 +170,36 @@ func run() error {
 		"不要在工具调用前输出计划或说明文字。" +
 		"如果回答不依赖项目文件，则直接回答，不要调用工具。"
 
-		// PostgreSQL 连接池：会话历史持久化存储。
-	// 本地开发通过 Unix socket 连接（postgres:/// 三个斜杠），不需要密码；
-	// sslmode=disable 因为本地不需要 TLS。生产环境应从环境变量读取连接字符串。
-	dbPool, err := pgxpool.New(ctx, "postgres:///agenthub?sslmode=disable")
+		// ParseConfig 解析连接字符串，返回可修改的配置对象。
+	// 然后手动设置各个参数，替代 pgxpool.New 的默认配置。
+	dbConfig, err := pgxpool.ParseConfig("postgres:///agenthub?sslmode=disable")
+	if err != nil {
+		return fmt.Errorf("parse database config: %w", err)
+	}
+	dbConfig.MaxConns = 10                        // 最大 10 个连接，防止把数据库打挂
+	dbConfig.MinConns = 2                         // 保持 2 个空闲连接，预热避免冷启动
+	dbConfig.MaxConnLifetime = 30 * time.Minute   // 连接最多存活 30 分钟，防止老化
+	dbConfig.MaxConnIdleTime = 5 * time.Minute    // 空闲连接 5 分钟后释放
+	dbConfig.HealthCheckPeriod = 30 * time.Second // 每 30 秒检查连接健康
+
+	dbPool, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
 		return fmt.Errorf("connect database: %w", err)
 	}
+
 	defer dbPool.Close()
 
 	if err := dbPool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
 
-	// 执行 schema.sql 初始化表结构。
-	// CREATE TABLE IF NOT EXISTS 保证重复执行不会报错。
-	schemaPath := filepath.Join("configs", "schema.sql")
-	schemaSQL, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return fmt.Errorf("read schema %s: %w", schemaPath, err)
-	}
-	if _, err := dbPool.Exec(ctx, string(schemaSQL)); err != nil {
-		return fmt.Errorf("apply schema: %w", err)
+	// 替代原来的 "读取 schema.sql + CREATE TABLE IF NOT EXISTS"。
+	// migrate.New 的第一个参数是迁移文件路径（file:// 前缀表示本地文件系统），
+	// 第二个参数是数据库连接字符串。
+	// MigrateUp 会执行所有未执行的迁移，把数据库升级到最新版本。
+	migrationsPath := "file://" + filepath.Join("configs", "migrations")
+	if err := db.MigrateUp(migrationsPath, "postgres:///agenthub?sslmode=disable"); err != nil {
+		return fmt.Errorf("run database migrations: %w", err)
 	}
 
 	sessionManager := httpapi.NewSessionManager(dbPool, 20) // 每个会话保留最近 20 条消息
