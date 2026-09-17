@@ -12,13 +12,6 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// 默认会话过期时间与清理间隔。
-// 会话 30 分钟无访问则过期；每 5 分钟检查一次。
-const (
-	defaultSessionTTL      = 30 * time.Minute
-	defaultCleanupInterval = 5 * time.Minute
-)
-
 // Session 表示一个对话会话，持有该会话的历史消息。
 // History 只在 SessionManager 的方法内被修改，外部通过 GetHistory
 type Session struct {
@@ -39,12 +32,12 @@ type SessionManager struct {
 
 // NewSessionManager 创建会话管理器。
 // repo 是 SessionRepository 接口的实现（生产用 PostgresSessionRepository，测试用 MemorySessionRepository）。
-func NewSessionManager(repo SessionRepository, maxHistory int) *SessionManager {
+func NewSessionManager(repo SessionRepository, maxHistory int, ttl time.Duration, cleanupInterval time.Duration) *SessionManager {
 	return &SessionManager{
 		repo:            repo,
 		maxHistory:      maxHistory,
-		ttl:             defaultSessionTTL,
-		cleanupInterval: defaultCleanupInterval,
+		ttl:             ttl,
+		cleanupInterval: cleanupInterval,
 	}
 }
 

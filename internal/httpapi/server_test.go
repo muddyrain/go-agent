@@ -214,7 +214,7 @@ func TestNewToolCallbackIgnoresNonToolComponents(t *testing.T) {
 // --- 静态页面路由测试（内存测试）---
 
 func TestIndexHandlerReturnsHTML(t *testing.T) {
-	h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	resp := ut.PerformRequest(h.Engine, "GET", "/", nil)
 
 	if resp.Code != 200 {
@@ -256,7 +256,7 @@ func TestChatHandlerReturnsAgentAnswer(t *testing.T) {
 		},
 	}
 
-	h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	resp := postJSONToEngine(t, h, "/chat", `{"message":"  hello  "}`)
 
 	if resp.Code != 200 {
@@ -302,7 +302,7 @@ func TestChatHandlerRejectsInvalidRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+			h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 			resp := postJSONToEngine(t, h, "/chat", tt.body)
 
 			if resp.Code != tt.wantStatus {
@@ -341,7 +341,7 @@ func TestChatHandlerReturnsBadGatewayWhenAgentFails(t *testing.T) {
 					return tt.response, tt.err
 				},
 			}
-			h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+			h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 			resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
 
 			if resp.Code != 502 {
@@ -377,7 +377,7 @@ func TestStreamChatHandlerSendsChunksAndDone(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 200 {
@@ -431,7 +431,7 @@ func TestStreamChatHandlerRejectsInvalidRequest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// 请求校验失败时不会调用 Stream，传 nil 也安全
-			baseURL := startStreamTestServer(t, fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+			baseURL := startStreamTestServer(t, fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 			status, body := postJSONAndRead(t, baseURL, "/chat/stream", tt.body)
 
 			if status != tt.wantStatus {
@@ -455,7 +455,7 @@ func TestStreamChatHandlerReturnsBadGatewayWhenStreamFails(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 502 {
@@ -480,7 +480,7 @@ func TestStreamChatHandlerSendsErrorEventWhenStreamInterrupts(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	baseURL := startStreamTestServer(t, generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hello"}`)
 
 	if status != 200 {
@@ -530,7 +530,7 @@ func TestChatHandlerMultiTurnPreservesHistory(t *testing.T) {
 		},
 	}
 
-	sessionManager := NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20)
+	sessionManager := NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute)
 	h := NewServer(generator, "你是助手", sessionManager)
 
 	// 第一轮：创建会话
@@ -606,7 +606,7 @@ func TestChatHandlerNewSessionWithoutID(t *testing.T) {
 		},
 	}
 
-	h := NewServer(generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	h := NewServer(generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 
 	resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
 	if resp.Code != 200 {
@@ -635,7 +635,7 @@ func TestStreamChatHandlerDoneEventIncludesSessionID(t *testing.T) {
 		},
 	}
 
-	baseURL := startStreamTestServer(t, generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20))
+	baseURL := startStreamTestServer(t, generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute))
 	status, body := postJSONAndRead(t, baseURL, "/chat/stream", `{"message":"hi"}`)
 
 	if status != 200 {

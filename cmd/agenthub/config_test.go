@@ -30,17 +30,3 @@ func TestLoadLocalEnvAllowsMissingFile(t *testing.T) {
 		t.Fatalf("loadLocalEnv() error = %v, want nil", err)
 	}
 }
-
-func TestNewOpenAIChatModelFromEnvRequiresAPIKey(t *testing.T) {
-	t.Setenv("AGENTHUB_MODEL_API_KEY", "")
-	t.Setenv("AGENTHUB_MODEL_BASE_URL", "https://example.com/v1")
-	t.Setenv("AGENTHUB_MODEL_NAME", "example-model")
-
-	_, err := newOpenAIChatModelFromEnv(t.Context())
-	if err == nil {
-		t.Fatal("newOpenAIChatModelFromEnv() error = nil, want missing API key error")
-	}
-	if got, want := err.Error(), "AGENTHUB_MODEL_API_KEY is required"; got != want {
-		t.Fatalf("error = %q, want %q", got, want)
-	}
-}

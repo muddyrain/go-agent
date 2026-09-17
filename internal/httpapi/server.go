@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -323,10 +324,13 @@ func Run(
 	systemPrompt string,
 	sessionManager *SessionManager,
 	ctx context.Context,
+	port int,
 ) error {
-	log.Printf("HTTP server listening on http://%s", address)
 
-	h := NewServer(reactAgent, systemPrompt, sessionManager)
+	address := fmt.Sprintf("127.0.0.1:%d", port)
+	h := server.Default(server.WithHostPorts(address))
+
+	log.Printf("HTTP server listening on http://%s", address)
 
 	// SetCustomSignalWaiter 替换 Hertz 默认的信号等待逻辑。
 	// 默认实现自己监听 SIGINT/SIGTERM；我们改为统一监听 ctx.Done()，

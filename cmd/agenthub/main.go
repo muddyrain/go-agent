@@ -2,6 +2,7 @@ package main
 
 import (
 	"agenthub/internal/cli"
+	"agenthub/internal/config"
 	"agenthub/internal/db"
 	"agenthub/internal/httpapi"
 	"agenthub/internal/mcpclient"
@@ -15,7 +16,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
@@ -56,15 +56,23 @@ func run() error {
 	if err := loadLocalEnv(".env"); err != nil {
 		return err
 	}
-	ctx := context.Background()
 
+	// 所有配置从环境变量加载，集中管理，避免硬编码散落在各个文件。
+	// Validate 在启动时检查必填项，避免把配置问题延迟成运行时错误。
+	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
+	}
+	log.Printf("configuration loaded: env=%s, http_port=%d, db=%s", cfg.Env, cfg.HTTPPort, cfg.DatabaseURL)
+
+	ctx := context.Background()
 	// signal.NotifyContext 监听 SIGINT（Ctrl+C）和 SIGTERM（kill 默认），
 	// 收到信号时自动取消返回的 ctx。所有监听 ctx.Done() 的地方
 	// （清理 goroutine、HTTP 信号等待器）会同时收到取消通知。
 	// stop() 恢复信号默认处理并释放内部资源，defer 确保一定调用。
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	chatModel, err := newOpenAIChatModelFromEnv(ctx)
+	chatModel, err := newOpenAIChatModelFromEnv(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -171,16 +179,16 @@ func run() error {
 		"如果回答不依赖项目文件，则直接回答，不要调用工具。"
 
 		// ParseConfig 解析连接字符串，返回可修改的配置对象。
-	// 然后手动设置各个参数，替代 pgxpool.New 的默认配置。
-	dbConfig, err := pgxpool.ParseConfig("postgres:///agenthub?sslmode=disable")
+		// 然后手动设置各个参数，替代 pgxpool.New 的默认配置。
+	dbConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("parse database config: %w", err)
 	}
-	dbConfig.MaxConns = 10                        // 最大 10 个连接，防止把数据库打挂
-	dbConfig.MinConns = 2                         // 保持 2 个空闲连接，预热避免冷启动
-	dbConfig.MaxConnLifetime = 30 * time.Minute   // 连接最多存活 30 分钟，防止老化
-	dbConfig.MaxConnIdleTime = 5 * time.Minute    // 空闲连接 5 分钟后释放
-	dbConfig.HealthCheckPeriod = 30 * time.Second // 每 30 秒检查连接健康
+	dbConfig.MaxConns = int32(cfg.DBPoolMaxConns)
+	dbConfig.MinConns = int32(cfg.DBPoolMinConns)
+	dbConfig.MaxConnLifetime = cfg.DBPoolMaxConnLifetime
+	dbConfig.MaxConnIdleTime = cfg.DBPoolMaxConnIdleTime
+	dbConfig.HealthCheckPeriod = cfg.DBPoolHealthCheckPeriod
 
 	dbPool, err := pgxpool.NewWithConfig(ctx, dbConfig)
 	if err != nil {
@@ -198,30 +206,17 @@ func run() error {
 	// 第二个参数是数据库连接字符串。
 	// MigrateUp 会执行所有未执行的迁移，把数据库升级到最新版本。
 	migrationsPath := "file://" + filepath.Join("configs", "migrations")
-	if err := db.MigrateUp(migrationsPath, "postgres:///agenthub?sslmode=disable"); err != nil {
+	if err := db.MigrateUp(migrationsPath, cfg.DatabaseURL); err != nil {
 		return fmt.Errorf("run database migrations: %w", err)
 	}
 
 	repo := httpapi.NewPostgresSessionRepository(dbPool)
-	sessionManager := httpapi.NewSessionManager(repo, 20) // 每个会话保留最近 20 条消息
-	sessionManager.StartCleanup(ctx)                      // 启动会话过期清理后台 goroutine
+	sessionManager := httpapi.NewSessionManager(repo, cfg.SessionMaxHistory, cfg.SessionTTL, cfg.SessionCleanupInterval)
+	sessionManager.StartCleanup(ctx)
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
-		return httpapi.Run(
-			reactAgent,
-			systemPrompt,
-			sessionManager,
-			ctx,
-		)
+		return httpapi.Run(reactAgent, systemPrompt, sessionManager, ctx, cfg.HTTPPort)
 	}
 
-	return cli.Run(
-		ctx,
-		reactAgent,
-		toolCatalog,
-		systemPrompt,
-		os.Stdin,
-		os.Stdout,
-	)
-
+	return cli.Run(ctx, reactAgent, toolCatalog, systemPrompt, os.Stdin, os.Stdout)
 }

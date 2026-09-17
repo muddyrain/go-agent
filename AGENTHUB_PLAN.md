@@ -171,7 +171,7 @@ usage: input=0 output=0 total=0
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
-| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.3 已掌握，下一节 F.4 配置管理与环境隔离 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.4 已掌握，下一节 F.5 配置文件与多环境管理 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase F：会话与配置持久化**
-- 当前路线决策：**F.3 已完成；引入 SessionRepository 接口抽象数据访问层，PostgresSessionRepository 实现（SQL 操作集中管理），MemorySessionRepository 实现（测试用内存存储，不需要真实数据库），SessionManager 改为依赖接口（业务逻辑与数据访问分离），事务边界明确（AppendMessages 在 Repository 内部用事务保证多条消息原子性），业务逻辑测试改用内存实现速度更快。下一节 F.4 配置管理与环境隔离。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.3**
+- 当前路线决策：**F.4 已完成；引入统一 Config 结构体集中管理所有配置（环境、HTTP、数据库、连接池、会话、模型），从环境变量加载配置（AGENTHUB_ 前缀），有合理默认值，启动时 Validate 验证必填项和范围，生产环境额外检查防止连本地数据库，配置辅助函数 getEnv/getEnvInt/getEnvDuration 封装类型转换，所有硬编码配置（数据库连接串、HTTP 端口、会话 TTL、连接池参数）改为从 Config 读取。下一节 F.5 配置文件与多环境管理。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.4**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -424,13 +424,21 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - F.3 可见结果：业务逻辑测试用内存实现，运行速度从 ~8s 降到 ~1s；`go test ./internal/httpapi/... -run TestSessionManager` 不需要启动数据库；替换 Repository 实现（PostgreSQL → 内存 → 未来 MySQL）不需要改 SessionManager 代码
 - F.3 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
 - F.3 理解验收：能说明 Repository 模式和 ORM 的区别（接口是你定义的，ORM 是框架给的）、依赖倒置的价值（上层依赖接口不依赖实现，可替换可测试）、事务边界的判断标准（多条写操作需要事务，单条 SQL 不需要）、为什么 `GetSession` 不存在时返回 `(nil, nil)` 而不是错误（由接口封装数据库差异，上层不需要知道 pgx.ErrNoRows）、内存实现的价值（测试速度快、不依赖外部服务、可模拟边界情况）、为什么 `TouchSession` 不在 Append 事务内（失败可接受，不影响主流程）
-- 下一节：**F.4 配置管理与环境隔离**
-- 下一节只做：引入配置结构体，从环境变量和配置文件读取（数据库连接串、模型 API Key、HTTP 端口、会话 TTL 等），区分开发/测试/生产环境配置，配置验证（启动时检查必填项）；不做配置热更新、远程配置中心、多租户配置
-- 下一节明确不做：配置热更新、etcd/Consul 远程配置、多租户配置、动态配置下发
+- F.4 Config 结构体：`internal/config/config.go` 定义 `Config` 结构体，集中管理所有配置（Env/HTTPPort/DatabaseURL/连接池参数/会话参数/模型参数）；所有字段从环境变量加载（`AGENTHUB_` 前缀），未设置时用默认值；`Load()` 函数返回配置实例，`Validate()` 方法在启动时检查必填项（ModelAPIKey/ModelBaseURL/ModelName/DatabaseURL）和范围（HTTPPort 1-65535、DBPoolMaxConns>=1、SessionMaxHistory>=1），生产环境额外检查 DatabaseURL 不能是本地地址（防止生产连本地数据库）
+- F.4 配置辅助函数：`getEnv(key, defaultValue)` 读取字符串环境变量，为空返回默认值；`getEnvInt(key, defaultValue)` 读取整数，解析失败返回默认值；`getEnvDuration(key, defaultValue)` 读取时长（如 "30m"、"5s"），用 `time.ParseDuration` 解析，失败返回默认值；辅助函数封装了类型转换和错误处理，调用方不需要关心解析细节
+- F.4 环境区分：`Env` 字段支持 `development`/`test`/`production` 三个值；`IsDevelopment()`/`IsTest()`/`IsProduction()` 辅助方法判断环境；生产环境有更严格的验证（不能用本地数据库），开发环境有宽松的默认值（本地数据库、8080端口）
+- F.4 硬编码清理：`main.go` 中数据库连接串从硬编码 `postgres:///agenthub?sslmode=disable` 改为 `cfg.DatabaseURL`（出现两处：连接池和迁移）；连接池参数（MaxConns/MinConns/MaxConnLifetime 等）从硬编码改为从 cfg 读取（注意 pgxpool 的 MaxConns/MinConns 是 int32，需要显式转换）；HTTP 端口从 `const address = "127.0.0.1:8080"` 改为 `fmt.Sprintf("127.0.0.1:%d", cfg.HTTPPort)`，`Run` 函数新增 port 参数；会话 TTL/清理间隔从 `defaultSessionTTL`/`defaultCleanupInterval` 常量改为从 cfg 读取，`NewSessionManager` 新增 ttl/cleanupInterval 参数；模型配置从 `newOpenAIChatModelFromEnv` 直接读环境变量改为 `newOpenAIChatModel(ctx, cfg)` 从配置读取，验证逻辑移到 `Config.Validate()`
+- F.4 测试：`internal/config/config_test.go` 测试默认值（`TestLoad_Defaults`）、从环境变量加载（`TestLoad_FromEnv`）、缺少必填项验证（`TestValidate_MissingRequired`）、无效端口验证（`TestValidate_InvalidPort`）、生产环境本地数据库保护（`TestValidate_ProductionLocalDB`）、环境辅助方法（`TestEnvHelpers`）；`clearTestEnv()` 清空所有 `AGENTHUB_` 前缀环境变量，避免测试间互相影响（注意用 `strings.HasPrefix` 而不是手动数前缀长度）；`cmd/agenthub/config_test.go` 删除旧的 `TestNewOpenAIChatModelFromEnvRequiresAPIKey`（验证逻辑已移到 Config.Validate）
+- F.4 可见结果：启动服务时日志输出 `configuration loaded: env=development, http_port=8080, db=postgres:///agenthub?sslmode=disable`；用 `AGENTHUB_HTTP_PORT=9090 go run ./cmd/agenthub serve` 可以改端口；`AGENTHUB_ENV=production` 且用本地数据库时启动报错；缺少 `AGENTHUB_MODEL_API_KEY` 时启动报错
+- F.4 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
+- F.4 理解验收：能说明配置集中管理的价值（避免硬编码散落、换环境不改代码、统一验证入口）、环境变量命名规范（AGENTHUB_ 前缀避免冲突）、默认值策略（开发环境友好默认值，生产环境强制配置）、Validate 的价值（启动时快速失败，避免配置问题延迟成运行时错误）、生产环境保护的意义（防止生产环境连到本地数据库）、为什么用手动 os.Getenv 而不是第三方库（教学价值、配置项不多、不引入额外依赖）、int 和 int32 类型转换（pgxpool 的 MaxConns 是 int32，Go 不自动转换）
+- 下一节：**F.5 配置文件与多环境管理**
+- 下一节只做：支持从 YAML/TOML 配置文件读取配置，配置文件优先级（环境变量 > 配置文件 > 默认值），按环境加载不同配置文件（config.development.yaml / config.production.yaml），配置文件示例和文档；不做配置热更新、远程配置中心、多租户配置
+- 下一节明确不做：配置热更新、etcd/Consul 远程配置、多租户配置、动态配置下发、配置加密
 
 ## 9. 下一节理解验收题
 
-F.3 的集中理解验收已通过：学习者能够说明 Repository 模式和 ORM 的区别（接口是你定义的，ORM 是框架给的）、依赖倒置的价值（上层依赖接口不依赖实现，可替换可测试）、事务边界的判断标准（多条写操作需要事务，单条 SQL 不需要）、为什么 `GetSession` 不存在时返回 `(nil, nil)` 而不是错误（由接口封装数据库差异，上层不需要知道 pgx.ErrNoRows）、内存实现的价值（测试速度快、不依赖外部服务、可模拟边界情况），以及为什么 `TouchSession` 不在 Append 事务内（失败可接受，不影响主流程）。
+F.4 的集中理解验收已通过：学习者能够说明配置集中管理的价值（避免硬编码散落、换环境不改代码、统一验证入口）、环境变量命名规范（AGENTHUB_ 前缀避免冲突）、默认值策略（开发环境友好默认值，生产环境强制配置）、Validate 的价值（启动时快速失败，避免配置问题延迟成运行时错误）、生产环境保护的意义（防止生产环境连到本地数据库）、为什么用手动 os.Getenv 而不是第三方库（教学价值、配置项不多、不引入额外依赖），以及 int 和 int32 类型转换（pgxpool 的 MaxConns 是 int32，Go 不自动转换）。
 
 ## 10. 历史路线处理
 

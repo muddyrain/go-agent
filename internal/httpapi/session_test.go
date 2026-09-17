@@ -15,7 +15,7 @@ func TestNewSessionManager(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	if sm == nil {
 		t.Fatal("NewSessionManager returned nil")
 	}
@@ -28,7 +28,7 @@ func TestGetOrCreateWithEmptyIDCreatesNew(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 
 	s := sm.GetOrCreate("")
 	if s == nil {
@@ -49,7 +49,7 @@ func TestGetOrCreateReturnsExisting(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 
 	s1 := sm.GetOrCreate("")
 	s2 := sm.GetOrCreate(s1.ID)
@@ -63,7 +63,7 @@ func TestGetOrCreateWithUnknownIDCreatesNew(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 
 	// 传入一个不存在的 ID，应该创建新会话（忽略传入的 ID，生成新 ID）
 	s := sm.GetOrCreate("nonexistent-id-12345")
@@ -79,7 +79,7 @@ func TestGetHistoryReturnsCopy(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	s := sm.GetOrCreate("")
 
 	userMsg := schema.UserMessage("hello")
@@ -107,7 +107,7 @@ func TestGetHistoryUnknownIDReturnsEmpty(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	history := sm.GetHistory("nonexistent")
 	// PostgreSQL 版本返回空切片而不是 nil
 	if len(history) != 0 {
@@ -119,7 +119,7 @@ func TestAppendAddsMessages(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	s := sm.GetOrCreate("")
 
 	userMsg := schema.UserMessage("question")
@@ -143,7 +143,7 @@ func TestAppendTruncatesOldMessages(t *testing.T) {
 	cleanupTestDB(t, db)
 
 	// maxHistory = 4，追加 3 轮（6 条）后应该只保留最近 4 条
-	sm := NewSessionManager(NewMemorySessionRepository(), 4)
+	sm := NewSessionManager(NewMemorySessionRepository(), 4, 30*time.Minute, 5*time.Minute)
 	s := sm.GetOrCreate("")
 
 	for i := 0; i < 3; i++ {
@@ -169,7 +169,7 @@ func TestAppendUnknownIDDoesNotPanic(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	// 对不存在的 ID 调用 Append 应该安全返回，不 panic
 	// （PostgreSQL 外键约束会导致 INSERT 失败，Append 内部记录日志后返回）
 	sm.Append("nonexistent", schema.UserMessage("x"), schema.AssistantMessage("y", nil))
@@ -180,7 +180,7 @@ func TestGenerateSessionIDUnique(t *testing.T) {
 	cleanupTestDB(t, db)
 
 	// 通过 GetOrCreate 生成 100 个 ID，不应有重复
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		s := sm.GetOrCreate("")
@@ -200,7 +200,7 @@ func TestSessionManagerConcurrentAccess(t *testing.T) {
 	db := getTestDB(t)
 	cleanupTestDB(t, db)
 
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 	session := sm.GetOrCreate("")
 
 	const goroutines = 10
@@ -238,7 +238,7 @@ func TestSessionManagerConcurrentAccess(t *testing.T) {
 
 func TestSessionManagerCleanupExpired(t *testing.T) {
 	repo := NewMemorySessionRepository()
-	sm := NewSessionManager(repo, 20)
+	sm := NewSessionManager(repo, 20, 30*time.Minute, 5*time.Minute)
 
 	// 创建一个正常 session（last_access = 当前时间，未过期）
 	active := sm.GetOrCreate("")
@@ -270,7 +270,7 @@ func TestSessionManagerCleanupExpired(t *testing.T) {
 }
 
 func TestSessionManagerStartCleanupStopsOnCancel(t *testing.T) {
-	sm := NewSessionManager(NewMemorySessionRepository(), 20)
+	sm := NewSessionManager(NewMemorySessionRepository(), 20, 30*time.Minute, 5*time.Minute)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sm.StartCleanup(ctx)
