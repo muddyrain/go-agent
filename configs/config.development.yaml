@@ -1,0 +1,26 @@
+# AgentHub 开发环境配置
+# 配置优先级：环境变量 > 本文件 > 默认值
+# 敏感信息（API Key、数据库密码）不要写在这里，用环境变量注入
+
+env: development
+http_port: 8080
+
+# 本地 PostgreSQL，Unix socket 连接，不需要密码
+database_url: postgres:///agenthub?sslmode=disable
+
+# 连接池配置（开发环境用小一点的连接池）
+db_pool_max_conns: 10
+db_pool_min_conns: 2
+db_pool_max_conn_lifetime: 30m
+db_pool_max_conn_idle_time: 5m
+db_pool_health_check_period: 30s
+
+# 会话配置
+session_ttl: 30m
+session_cleanup_interval: 5m
+session_max_history: 20
+
+# 模型配置（敏感信息，用环境变量注入，不写在文件里）
+# model_api_key: your-api-key
+# model_base_url: https://your-provider.example/v1
+# model_name: your-tool-calling-model

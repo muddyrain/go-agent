@@ -4,10 +4,14 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config 集中管理应用所有配置。
@@ -40,35 +44,195 @@ type Config struct {
 	ModelName    string
 }
 
-// Load 从环境变量加载配置，未设置的项使用默认值。
-// 环境变量统一用 AGENTHUB_ 前缀，避免和其他程序冲突。
+type fileConfig struct {
+	Env                     string        `yaml:"env"`
+	HTTPPort                int           `yaml:"http_port"`
+	DatabaseURL             string        `yaml:"database_url"`
+	DBPoolMaxConns          int           `yaml:"db_pool_max_conns"`
+	DBPoolMinConns          int           `yaml:"db_pool_min_conns"`
+	DBPoolMaxConnLifetime   time.Duration `yaml:"db_pool_max_conn_lifetime"`
+	DBPoolMaxConnIdleTime   time.Duration `yaml:"db_pool_max_conn_idle_time"`
+	DBPoolHealthCheckPeriod time.Duration `yaml:"db_pool_health_check_period"`
+	SessionTTL              time.Duration `yaml:"session_ttl"`
+	SessionCleanupInterval  time.Duration `yaml:"session_cleanup_interval"`
+	SessionMaxHistory       int           `yaml:"session_max_history"`
+	ModelAPIKey             string        `yaml:"model_api_key"`
+	ModelBaseURL            string        `yaml:"model_base_url"`
+	ModelName               string        `yaml:"model_name"`
+}
+
+// Load 加载配置，优先级：环境变量 > 配置文件 > 默认值。
 func Load() *Config {
+	// 第 1 步：先确定环境（环境变量最高优先级，所以先读）
+	env := getEnv("AGENTHUB_ENV", "development")
+
+	// 第 2 步：加载默认值
+	cfg := loadDefaults()
+
+	// 第 3 步：加载配置文件（如果存在），覆盖默认值
+	loadConfigFile(cfg, env)
+
+	// 第 4 步：加载环境变量，覆盖所有（最高优先级）
+	loadEnvVars(cfg)
+
+	return cfg
+}
+
+// 加载默认值
+func loadDefaults() *Config {
 	return &Config{
-		// 环境
-		Env: getEnv("AGENTHUB_ENV", "development"),
+		Env:                     "development",
+		HTTPPort:                8080,
+		DatabaseURL:             "postgres:///agenthub?sslmode=disable",
+		DBPoolMaxConns:          10,
+		DBPoolMinConns:          2,
+		DBPoolMaxConnLifetime:   30 * time.Minute,
+		DBPoolMaxConnIdleTime:   5 * time.Minute,
+		DBPoolHealthCheckPeriod: 30 * time.Second,
+		SessionTTL:              30 * time.Minute,
+		SessionCleanupInterval:  5 * time.Minute,
+		SessionMaxHistory:       20,
+	}
+}
 
-		// HTTP
-		HTTPPort: getEnvInt("AGENTHUB_HTTP_PORT", 8080),
+// 从环境变量加载配置，覆盖所有
+func loadEnvVars(cfg *Config) {
+	if v := os.Getenv("AGENTHUB_ENV"); v != "" {
+		cfg.Env = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("AGENTHUB_HTTP_PORT"); v != "" {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			cfg.HTTPPort = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_DATABASE_URL"); v != "" {
+		cfg.DatabaseURL = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("AGENTHUB_DB_POOL_MAX_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			cfg.DBPoolMaxConns = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_DB_POOL_MIN_CONNS"); v != "" {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			cfg.DBPoolMinConns = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_DB_POOL_MAX_CONN_LIFETIME"); v != "" {
+		if parsed, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			cfg.DBPoolMaxConnLifetime = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_DB_POOL_MAX_CONN_IDLE_TIME"); v != "" {
+		if parsed, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			cfg.DBPoolMaxConnIdleTime = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_DB_POOL_HEALTH_CHECK_PERIOD"); v != "" {
+		if parsed, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			cfg.DBPoolHealthCheckPeriod = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_SESSION_TTL"); v != "" {
+		if parsed, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			cfg.SessionTTL = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_SESSION_CLEANUP_INTERVAL"); v != "" {
+		if parsed, err := time.ParseDuration(strings.TrimSpace(v)); err == nil {
+			cfg.SessionCleanupInterval = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_SESSION_MAX_HISTORY"); v != "" {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			cfg.SessionMaxHistory = parsed
+		}
+	}
+	if v := os.Getenv("AGENTHUB_MODEL_API_KEY"); v != "" {
+		cfg.ModelAPIKey = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("AGENTHUB_MODEL_BASE_URL"); v != "" {
+		cfg.ModelBaseURL = strings.TrimSpace(v)
+	}
+	if v := os.Getenv("AGENTHUB_MODEL_NAME"); v != "" {
+		cfg.ModelName = strings.TrimSpace(v)
+	}
+}
 
-		// 数据库
-		DatabaseURL: getEnv("AGENTHUB_DATABASE_URL", "postgres:///agenthub?sslmode=disable"),
+// 加载配置文件
+// 1. 优先用 AGENTHUB_CONFIG_FILE 指定的路径
+// 2. 否则按环境自动查找 configs/config.<env>.yaml
+// 3. 文件不存在时不报错，静默跳过（用默认值 + 环境变量）
+func loadConfigFile(cfg *Config, env string) {
+	// 确定配置文件路径
+	configPath := os.Getenv("AGENTHUB_CONFIG_FILE")
+	if configPath == "" {
+		configPath = filepath.Join("configs", fmt.Sprintf("config.%s.yaml", env))
+	}
 
-		// 连接池
-		DBPoolMaxConns:          getEnvInt("AGENTHUB_DB_POOL_MAX_CONNS", 10),
-		DBPoolMinConns:          getEnvInt("AGENTHUB_DB_POOL_MIN_CONNS", 2),
-		DBPoolMaxConnLifetime:   getEnvDuration("AGENTHUB_DB_POOL_MAX_CONN_LIFETIME", 30*time.Minute),
-		DBPoolMaxConnIdleTime:   getEnvDuration("AGENTHUB_DB_POOL_MAX_CONN_IDLE_TIME", 5*time.Minute),
-		DBPoolHealthCheckPeriod: getEnvDuration("AGENTHUB_DB_POOL_HEALTH_CHECK_PERIOD", 30*time.Second),
+	// 读取文件
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// 文件不存在或读不了，静默跳过，用默认值 + 环境变量
+		return
+	}
 
-		// 会话
-		SessionTTL:             getEnvDuration("AGENTHUB_SESSION_TTL", 30*time.Minute),
-		SessionCleanupInterval: getEnvDuration("AGENTHUB_SESSION_CLEANUP_INTERVAL", 5*time.Minute),
-		SessionMaxHistory:      getEnvInt("AGENTHUB_SESSION_MAX_HISTORY", 20),
+	// 解析 YAML
+	var fc fileConfig
+	if err := yaml.Unmarshal(data, &fc); err != nil {
+		log.Printf("warning: parse config file %s: %v, using defaults", configPath, err)
+		return
+	}
 
-		// 模型（没有默认值，必须显式配置）
-		ModelAPIKey:  getEnv("AGENTHUB_MODEL_API_KEY", ""),
-		ModelBaseURL: getEnv("AGENTHUB_MODEL_BASE_URL", ""),
-		ModelName:    getEnv("AGENTHUB_MODEL_NAME", ""),
+	// 合并到 cfg：只覆盖文件里明确设置了的字段（非零值）
+	mergeFileConfig(cfg, &fc)
+}
+
+// 合并配置文件到 Config
+// 只覆盖文件里非零值的字段，零值表示文件里没设置，保持默认值。
+// 这样配置文件可以只写需要修改的项，不需要写全所有项。
+func mergeFileConfig(cfg *Config, fc *fileConfig) {
+	if fc.Env != "" {
+		cfg.Env = fc.Env
+	}
+	if fc.HTTPPort != 0 {
+		cfg.HTTPPort = fc.HTTPPort
+	}
+	if fc.DatabaseURL != "" {
+		cfg.DatabaseURL = fc.DatabaseURL
+	}
+	if fc.DBPoolMaxConns != 0 {
+		cfg.DBPoolMaxConns = fc.DBPoolMaxConns
+	}
+	if fc.DBPoolMinConns != 0 {
+		cfg.DBPoolMinConns = fc.DBPoolMinConns
+	}
+	if fc.DBPoolMaxConnLifetime != 0 {
+		cfg.DBPoolMaxConnLifetime = fc.DBPoolMaxConnLifetime
+	}
+	if fc.DBPoolMaxConnIdleTime != 0 {
+		cfg.DBPoolMaxConnIdleTime = fc.DBPoolMaxConnIdleTime
+	}
+	if fc.DBPoolHealthCheckPeriod != 0 {
+		cfg.DBPoolHealthCheckPeriod = fc.DBPoolHealthCheckPeriod
+	}
+	if fc.SessionTTL != 0 {
+		cfg.SessionTTL = fc.SessionTTL
+	}
+	if fc.SessionCleanupInterval != 0 {
+		cfg.SessionCleanupInterval = fc.SessionCleanupInterval
+	}
+	if fc.SessionMaxHistory != 0 {
+		cfg.SessionMaxHistory = fc.SessionMaxHistory
+	}
+	if fc.ModelAPIKey != "" {
+		cfg.ModelAPIKey = fc.ModelAPIKey
+	}
+	if fc.ModelBaseURL != "" {
+		cfg.ModelBaseURL = fc.ModelBaseURL
+	}
+	if fc.ModelName != "" {
+		cfg.ModelName = fc.ModelName
 	}
 }
 

@@ -171,7 +171,7 @@ usage: input=0 output=0 total=0
 | Phase C：可用 CLI Agent | 演示 Model 不能解决真实问题 | 真实模型、多轮对话、工具调用和流式终端 | Eino | 已完成：C.1—C.5 已掌握 |
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
-| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 进行中：F.1—F.4 已掌握，下一节 F.5 配置文件与多环境管理 |
+| Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 待开始 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase F：会话与配置持久化**
-- 当前路线决策：**F.4 已完成；引入统一 Config 结构体集中管理所有配置（环境、HTTP、数据库、连接池、会话、模型），从环境变量加载配置（AGENTHUB_ 前缀），有合理默认值，启动时 Validate 验证必填项和范围，生产环境额外检查防止连本地数据库，配置辅助函数 getEnv/getEnvInt/getEnvDuration 封装类型转换，所有硬编码配置（数据库连接串、HTTP 端口、会话 TTL、连接池参数）改为从 Config 读取。下一节 F.5 配置文件与多环境管理。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.4**
+- 当前阶段：**Phase F 已完成，下一节 Phase G：知识库与 RAG**
+- 当前路线决策：**F.5 已完成；支持从 YAML 配置文件读取配置（configs/config.<env>.yaml），配置优先级为环境变量 > 配置文件 > 默认值，按环境自动加载不同配置文件（development/production），配置文件不存在时静默降级用默认值+环境变量，fileConfig 结构体带 yaml tag，mergeFileConfig 只覆盖非零值字段，引入 gopkg.in/yaml.v3 依赖，.env 只保留敏感信息（模型 API Key），非敏感配置移到配置文件可版本控制。Phase F 全部完成，下一节 Phase G.1 知识库与 RAG 基础（pgvector + 文档向量化 + 基础检索）。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -432,13 +432,20 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - F.4 可见结果：启动服务时日志输出 `configuration loaded: env=development, http_port=8080, db=postgres:///agenthub?sslmode=disable`；用 `AGENTHUB_HTTP_PORT=9090 go run ./cmd/agenthub serve` 可以改端口；`AGENTHUB_ENV=production` 且用本地数据库时启动报错；缺少 `AGENTHUB_MODEL_API_KEY` 时启动报错
 - F.4 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
 - F.4 理解验收：能说明配置集中管理的价值（避免硬编码散落、换环境不改代码、统一验证入口）、环境变量命名规范（AGENTHUB_ 前缀避免冲突）、默认值策略（开发环境友好默认值，生产环境强制配置）、Validate 的价值（启动时快速失败，避免配置问题延迟成运行时错误）、生产环境保护的意义（防止生产环境连到本地数据库）、为什么用手动 os.Getenv 而不是第三方库（教学价值、配置项不多、不引入额外依赖）、int 和 int32 类型转换（pgxpool 的 MaxConns 是 int32，Go 不自动转换）
-- 下一节：**F.5 配置文件与多环境管理**
-- 下一节只做：支持从 YAML/TOML 配置文件读取配置，配置文件优先级（环境变量 > 配置文件 > 默认值），按环境加载不同配置文件（config.development.yaml / config.production.yaml），配置文件示例和文档；不做配置热更新、远程配置中心、多租户配置
-- 下一节明确不做：配置热更新、etcd/Consul 远程配置、多租户配置、动态配置下发、配置加密
+- F.5 YAML 配置文件：`internal/config/config.go` 新增 `fileConfig` 结构体（带 `yaml:"xxx"` tag 映射 YAML 字段），`Load()` 拆分为 `loadDefaults()`（加载默认值）→ `loadConfigFile()`（读取并解析 YAML 配置文件）→ `loadEnvVars()`（环境变量覆盖），实现配置优先级：环境变量 > 配置文件 > 默认值；`loadConfigFile()` 优先用 `AGENTHUB_CONFIG_FILE` 指定路径，否则按环境自动查找 `configs/config.<env>.yaml`，文件不存在时静默降级（不报错）；`mergeFileConfig()` 只覆盖文件里非零值的字段，零值表示文件里没设置保持默认值，这样配置文件可以只写需要修改的项
+- F.5 多环境配置：新建 `configs/config.development.yaml`（开发环境配置，本地数据库、小连接池、短会话 TTL）和 `configs/config.production.yaml`（生产环境配置，大连接池、长会话 TTL，数据库地址通过环境变量注入不写在文件里）；通过 `AGENTHUB_ENV` 环境变量决定加载哪个文件；`.env` 只保留敏感信息（模型 API Key/BaseURL/ModelName），非敏感配置移到配置文件可版本控制
+- F.5 调试过程：遇到两个问题。(1) import 写错成 `github.com/stretchr/testify/assert/yaml`（IDE 自动 import 选错），应该是 `gopkg.in/yaml.v3`，导致 YAML 解析不生效；(2) `.env` 文件里设置了 `AGENTHUB_HTTP_PORT=8080`，环境变量优先级高于配置文件，覆盖了配置文件里的 `http_port: 9090`，删掉 `.env` 里的非敏感配置后正常。这两个问题都验证了配置优先级设计的正确性
+- F.5 测试：`internal/config/config_test.go` 新增 `TestLoad_ConfigFile`（配置文件覆盖默认值）、`TestLoad_EnvVarOverridesConfigFile`（环境变量优先级高于配置文件）、`TestLoad_MissingConfigFile`（配置文件不存在时静默降级用默认值）；测试用 `t.TempDir()` 创建临时配置文件，用 `AGENTHUB_CONFIG_FILE` 指定路径
+- F.5 可见结果：修改 `configs/config.development.yaml` 里的 `http_port: 9090`，启动服务日志显示 `http_port=9090`（从配置文件读取）；设置 `AGENTHUB_HTTP_PORT=7777` 启动，日志显示 `http_port=7777`（环境变量覆盖配置文件）；指定不存在的配置文件路径启动不报错，用默认值；`.env` 只保留模型配置，其他配置从文件读取
+- F.5 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
+- F.5 理解验收：能说明配置优先级（环境变量 > 配置文件 > 默认值）及原因（敏感信息用环境变量注入不写在代码/文件里，非敏感配置写文件可版本控制，默认值让开发环境开箱即用）、YAML tag 的作用（`yaml:"http_port"` 告诉解析器结构体字段对应 YAML 里的哪个 key）、为什么 mergeFileConfig 只覆盖非零值（配置文件可以只写需要修改的项，不需要写全所有项，零值表示没设置）、配置文件不存在时为什么静默降级而不是报错（开发环境可能没有配置文件，用默认值+环境变量也能跑，不应该因为缺少可选配置文件而启动失败）、多环境配置的意义（不同环境用不同配置文件，通过 AGENTHUB_ENV 切换，不需要改代码）、.env 和配置文件的分工（.env 放敏感信息不提交，配置文件放非敏感信息可提交共享）
+- 下一节：**Phase G.1 知识库与 RAG 基础**
+- 下一节只做：引入 pgvector 扩展，文档向量化存储，基础检索（相似度搜索），Agent 调用检索工具回答私有文档问题；不做文档分片策略、重排序、混合检索、多模态嵌入
+- 下一节明确不做：文档分片策略、重排序（Rerank）、混合检索（BM25+向量）、多模态嵌入、增量索引、文档版本管理
 
 ## 9. 下一节理解验收题
 
-F.4 的集中理解验收已通过：学习者能够说明配置集中管理的价值（避免硬编码散落、换环境不改代码、统一验证入口）、环境变量命名规范（AGENTHUB_ 前缀避免冲突）、默认值策略（开发环境友好默认值，生产环境强制配置）、Validate 的价值（启动时快速失败，避免配置问题延迟成运行时错误）、生产环境保护的意义（防止生产环境连到本地数据库）、为什么用手动 os.Getenv 而不是第三方库（教学价值、配置项不多、不引入额外依赖），以及 int 和 int32 类型转换（pgxpool 的 MaxConns 是 int32，Go 不自动转换）。
+F.5 的集中理解验收已通过：学习者能够说明配置优先级（环境变量 > 配置文件 > 默认值）及原因（敏感信息用环境变量注入不写在代码/文件里，非敏感配置写文件可版本控制，默认值让开发环境开箱即用）、YAML tag 的作用（`yaml:"http_port"` 告诉解析器结构体字段对应 YAML 里的哪个 key）、为什么 mergeFileConfig 只覆盖非零值（配置文件可以只写需要修改的项，不需要写全所有项，零值表示没设置）、配置文件不存在时为什么静默降级而不是报错（开发环境可能没有配置文件，用默认值+环境变量也能跑，不应该因为缺少可选配置文件而启动失败）、多环境配置的意义（不同环境用不同配置文件，通过 AGENTHUB_ENV 切换，不需要改代码），以及 .env 和配置文件的分工（.env 放敏感信息不提交，配置文件放非敏感信息可提交共享）。
 
 ## 10. 历史路线处理
 

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -121,5 +122,87 @@ func clearTestEnv() {
 				}
 			}
 		}
+	}
+}
+
+func TestLoad_ConfigFile(t *testing.T) {
+	clearTestEnv()
+	defer clearTestEnv()
+
+	// 创建临时配置文件
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte(`
+http_port: 9090
+session_max_history: 50
+db_pool_max_conns: 15
+`)
+	if err := os.WriteFile(configFile, content, 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	os.Setenv("AGENTHUB_CONFIG_FILE", configFile)
+	os.Setenv("AGENTHUB_MODEL_API_KEY", "test-key")
+	os.Setenv("AGENTHUB_MODEL_BASE_URL", "https://api.example.com/v1")
+	os.Setenv("AGENTHUB_MODEL_NAME", "test-model")
+
+	cfg := Load()
+
+	// 配置文件里设置的值应该覆盖默认值
+	if cfg.HTTPPort != 9090 {
+		t.Errorf("HTTPPort = %d, want 9090 (from config file)", cfg.HTTPPort)
+	}
+	if cfg.SessionMaxHistory != 50 {
+		t.Errorf("SessionMaxHistory = %d, want 50 (from config file)", cfg.SessionMaxHistory)
+	}
+	if cfg.DBPoolMaxConns != 15 {
+		t.Errorf("DBPoolMaxConns = %d, want 15 (from config file)", cfg.DBPoolMaxConns)
+	}
+
+	// 配置文件里没设置的值应该保持默认值
+	if cfg.DatabaseURL != "postgres:///agenthub?sslmode=disable" {
+		t.Errorf("DatabaseURL = %q, want default", cfg.DatabaseURL)
+	}
+}
+
+func TestLoad_EnvVarOverridesConfigFile(t *testing.T) {
+	clearTestEnv()
+	defer clearTestEnv()
+
+	// 创建临时配置文件，设置 http_port: 9090
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	content := []byte("http_port: 9090\n")
+	if err := os.WriteFile(configFile, content, 0o600); err != nil {
+		t.Fatalf("write config file: %v", err)
+	}
+
+	os.Setenv("AGENTHUB_CONFIG_FILE", configFile)
+	os.Setenv("AGENTHUB_HTTP_PORT", "7777") // 环境变量覆盖配置文件
+	os.Setenv("AGENTHUB_MODEL_API_KEY", "test-key")
+	os.Setenv("AGENTHUB_MODEL_BASE_URL", "https://api.example.com/v1")
+	os.Setenv("AGENTHUB_MODEL_NAME", "test-model")
+
+	cfg := Load()
+
+	// 环境变量优先级最高，应该覆盖配置文件
+	if cfg.HTTPPort != 7777 {
+		t.Errorf("HTTPPort = %d, want 7777 (env var overrides config file)", cfg.HTTPPort)
+	}
+}
+
+func TestLoad_MissingConfigFile(t *testing.T) {
+	clearTestEnv()
+	defer clearTestEnv()
+
+	// 指定一个不存在的配置文件，应该不报错，用默认值
+	os.Setenv("AGENTHUB_CONFIG_FILE", "/nonexistent/path/config.yaml")
+	os.Setenv("AGENTHUB_MODEL_API_KEY", "test-key")
+	os.Setenv("AGENTHUB_MODEL_BASE_URL", "https://api.example.com/v1")
+	os.Setenv("AGENTHUB_MODEL_NAME", "test-model")
+
+	cfg := Load()
+
+	// 应该用默认值
+	if cfg.HTTPPort != 8080 {
+		t.Errorf("HTTPPort = %d, want 8080 (default)", cfg.HTTPPort)
 	}
 }

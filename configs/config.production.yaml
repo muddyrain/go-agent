@@ -1,0 +1,23 @@
+# AgentHub 生产环境配置
+# 配置优先级：环境变量 > 本文件 > 默认值
+# 敏感信息（API Key、数据库密码）通过部署平台注入环境变量，不写在这里
+
+env: production
+http_port: 8080
+
+# 生产数据库地址通过环境变量注入，这里留空（用环境变量覆盖）
+# database_url: postgres://user:password@db.example.com:5432/agenthub?sslmode=require
+
+# 生产环境用大一点的连接池
+db_pool_max_conns: 20
+db_pool_min_conns: 5
+db_pool_max_conn_lifetime: 30m
+db_pool_max_conn_idle_time: 10m
+db_pool_health_check_period: 30s
+
+# 生产环境会话保留更久
+session_ttl: 24h
+session_cleanup_interval: 10m
+session_max_history: 50
+
+# 模型配置通过环境变量注入
