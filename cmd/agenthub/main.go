@@ -5,6 +5,7 @@ import (
 	"agenthub/internal/config"
 	"agenthub/internal/db"
 	"agenthub/internal/httpapi"
+	"agenthub/internal/knowledge"
 	"agenthub/internal/mcpclient"
 	"agenthub/internal/mcpserver"
 	"agenthub/internal/projecttool"
@@ -209,6 +210,11 @@ func run() error {
 	if err := db.MigrateUp(migrationsPath, cfg.DatabaseURL); err != nil {
 		return fmt.Errorf("run database migrations: %w", err)
 	}
+
+	// 创建嵌入模型和文档存储
+	embedder := knowledge.NewOpenAIEmbedder(cfg.ModelAPIKey, cfg.ModelBaseURL, "Qwen/Qwen3-Embedding-0.6B")
+	documentStore := knowledge.NewDocumentStore(dbPool, embedder)
+	_ = documentStore
 
 	repo := httpapi.NewPostgresSessionRepository(dbPool)
 	sessionManager := httpapi.NewSessionManager(repo, cfg.SessionMaxHistory, cfg.SessionTTL, cfg.SessionCleanupInterval)
