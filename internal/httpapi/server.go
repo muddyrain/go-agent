@@ -91,17 +91,18 @@ func NewServer(
 	reactAgent generator,
 	systemPrompt string,
 	sessionManager *SessionManager,
+	address string,
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
 
 	h.GET("/", indexHandler)
 
 	h.POST("/chat", func(ctx context.Context, c *app.RequestContext) {
-		chatHandler(ctx, c, reactAgent, systemPrompt, sessionManager)
+		chatHandler(ctx, c, reactAgent, systemPrompt, sessionManager, address)
 	})
 
 	h.POST("/chat/stream", func(ctx context.Context, c *app.RequestContext) {
-		streamChatHandler(ctx, c, reactAgent, systemPrompt, sessionManager)
+		streamChatHandler(ctx, c, reactAgent, systemPrompt, sessionManager, address)
 	})
 
 	return h
@@ -113,6 +114,7 @@ func chatHandler(
 	reactAgent generator,
 	systemPrompt string,
 	sessionManager *SessionManager,
+	address string,
 ) {
 	var input chatRequest
 
@@ -201,6 +203,7 @@ func streamChatHandler(
 	reactAgent generator,
 	systemPrompt string,
 	sessionManager *SessionManager,
+	address string,
 ) {
 	var input chatRequest
 
@@ -323,12 +326,13 @@ func Run(
 	reactAgent generator,
 	systemPrompt string,
 	sessionManager *SessionManager,
+	address string,
 	ctx context.Context,
 	port int,
 ) error {
 
-	address := fmt.Sprintf("127.0.0.1:%d", port)
-	h := server.Default(server.WithHostPorts(address))
+	address = fmt.Sprintf("127.0.0.1:%d", port)
+	h := NewServer(reactAgent, systemPrompt, sessionManager, address)
 
 	log.Printf("HTTP server listening on http://%s", address)
 

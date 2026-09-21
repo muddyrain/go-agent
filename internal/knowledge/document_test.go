@@ -33,19 +33,19 @@ func (m *mockEmbedder) Embed(ctx context.Context, texts []string) ([][]float32, 
 	result := make([][]float32, len(texts))
 	for i, text := range texts {
 		if vec, ok := m.vectors[text]; ok {
-			// 把短向量补到 1536 维，满足 vector(1536) 的要求
-			result[i] = padTo1536(vec)
+			// 把短向量补到 1024 维，满足 vector(1024) 的要求
+			result[i] = padTo1024(vec)
 		} else {
-			result[i] = padTo1536([]float32{0.1, 0.2, 0.3})
+			result[i] = padTo1024([]float32{0.1, 0.2, 0.3})
 		}
 	}
 	return result, nil
 }
 
-// padTo1536 把短向量补零到 1536 维。
+// padTo1024 把短向量补零到 1024 维。
 // 测试只需要前 3 维有区分度，后面补零不影响相似度计算。
-func padTo1536(vec []float32) []float32 {
-	padded := make([]float32, 1536)
+func padTo1024(vec []float32) []float32 {
+	padded := make([]float32, 1024)
 	copy(padded, vec)
 	return padded
 }

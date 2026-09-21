@@ -129,50 +129,6 @@ func run() error {
 			log.Printf("close MCP servers: %v", err)
 		}
 	}()
-
-	// Catalog 是模型工具集合与 CLI 诊断视图的单一来源：本地工具和
-	// MCP 工具在这里统一登记来源、所属 Server 和启用状态；真正执行
-	// ToolCall 的仍是 Eino ToolsNode，不是 Catalog。
-	entries := []toolcatalog.Entry{
-		{
-			Tool:    projectFileTool,
-			Source:  toolcatalog.SourceLocal,
-			Enabled: true,
-		},
-	}
-
-	for _, discovered := range mcpManager.Tools() {
-		entries = append(
-			entries,
-			toolcatalog.Entry{
-				Tool:    discovered.Tool,
-				Source:  toolcatalog.SourceMCP,
-				Server:  discovered.Server,
-				Enabled: true,
-			},
-		)
-	}
-
-	toolCatalog, err := toolcatalog.New(entries...)
-	if err != nil {
-		return fmt.Errorf("create tool catalog: %w", err)
-	}
-
-	reactAgent, err := react.NewAgent(
-		ctx,
-		&react.AgentConfig{
-			ToolCallingModel: chatModel,
-			ToolsConfig: compose.ToolsNodeConfig{
-				// 只有启用的工具进入模型 Schema 和 ToolsNode 路由；Catalog
-				// 中的禁用条目仍可由 /tools 展示，但模型无法调用。
-				Tools: toolCatalog.EnabledTools(),
-			},
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("create ReAct agent: %w", err)
-	}
-
 	const systemPrompt = "你是 AgentHub 项目助手。" +
 		"当用户要求读取、查看、分析或总结项目文件时，" +
 		"必须直接调用 read_project_file 工具，" +
@@ -214,14 +170,67 @@ func run() error {
 	// 创建嵌入模型和文档存储
 	embedder := knowledge.NewOpenAIEmbedder(cfg.ModelAPIKey, cfg.ModelBaseURL, "Qwen/Qwen3-Embedding-0.6B")
 	documentStore := knowledge.NewDocumentStore(dbPool, embedder)
-	_ = documentStore
+
+	searchTool, err := knowledge.NewSearchTool(documentStore)
+
+	if err != nil {
+		return fmt.Errorf("create search tool: %w", err)
+	}
+
+	// Catalog 是模型工具集合与 CLI 诊断视图的单一来源：本地工具和
+	// MCP 工具在这里统一登记来源、所属 Server 和启用状态；真正执行
+	// ToolCall 的仍是 Eino ToolsNode，不是 Catalog。
+	entries := []toolcatalog.Entry{
+		{
+			Tool:    projectFileTool,
+			Source:  toolcatalog.SourceLocal,
+			Enabled: true,
+		},
+		{
+			Tool:    searchTool,
+			Source:  toolcatalog.SourceLocal,
+			Enabled: true,
+		},
+	}
+
+	for _, discovered := range mcpManager.Tools() {
+		entries = append(
+			entries,
+			toolcatalog.Entry{
+				Tool:    discovered.Tool,
+				Source:  toolcatalog.SourceMCP,
+				Server:  discovered.Server,
+				Enabled: true,
+			},
+		)
+	}
+
+	toolCatalog, err := toolcatalog.New(entries...)
+	if err != nil {
+		return fmt.Errorf("create tool catalog: %w", err)
+	}
+
+	reactAgent, err := react.NewAgent(
+		ctx,
+		&react.AgentConfig{
+			ToolCallingModel: chatModel,
+			ToolsConfig: compose.ToolsNodeConfig{
+				// 只有启用的工具进入模型 Schema 和 ToolsNode 路由；Catalog
+				// 中的禁用条目仍可由 /tools 展示，但模型无法调用。
+				Tools: toolCatalog.EnabledTools(),
+			},
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create ReAct agent: %w", err)
+	}
 
 	repo := httpapi.NewPostgresSessionRepository(dbPool)
 	sessionManager := httpapi.NewSessionManager(repo, cfg.SessionMaxHistory, cfg.SessionTTL, cfg.SessionCleanupInterval)
 	sessionManager.StartCleanup(ctx)
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
-		return httpapi.Run(reactAgent, systemPrompt, sessionManager, ctx, cfg.HTTPPort)
+		return httpapi.Run(reactAgent, systemPrompt, sessionManager, "", ctx, cfg.HTTPPort)
 	}
 
 	return cli.Run(ctx, reactAgent, toolCatalog, systemPrompt, os.Stdin, os.Stdout)
