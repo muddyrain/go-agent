@@ -172,7 +172,7 @@ usage: input=0 output=0 total=0
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
-| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1 已掌握，下一小节 G.4.2 把分块接入文档导入 API |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1—G.4.2 已掌握，下一小节 G.4.3 保证多 Chunk 批量写入的原子性 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**G.4 拆成连续可运行小节推进；G.4.1 已完成独立文本分块器，下一小节只把分块结果接入文档导入 API，暂不同时改造批量数据库事务。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1**
+- 当前路线决策：**G.4 拆成连续可运行小节推进；G.4.1 已完成独立文本分块器，G.4.2 已把分块接入文档导入 API，下一小节只解决多 Chunk 写入中途失败会留下半批数据的问题。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1—G.4.2**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -443,11 +443,17 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - G.4.1 Unicode 边界：`Chunk` 将字符串转换为 `[]rune` 后再切片，避免按 UTF-8 字节下标切坏中文；纯空白文本返回 `nil`，生成到文本末尾后用 `break` 结束循环，避免产生只含重叠内容的多余块
 - G.4.1 最小测试：`chunker_test.go` 覆盖非法配置、空白和短文本、中文字符及相邻窗口重叠；`go test ./internal/knowledge -count=1`、`go vet ./internal/knowledge/...`、`go build ./...` 全部通过
 - G.4.1 理解验收：已理解重叠必须小于最大长度是为了保证步长 `maxChunkChars - overlapChars > 0`；Go 的 `len(string)` 和字符串切片按 UTF-8 字节工作，中文分块应转为 `[]rune`；`break` 只负责结束已经到达文本末尾的循环，不涉及资源关闭
-- 下一小节：**G.4.2 把 Chunker 接入 POST /documents，使一篇长文本按多个 Chunk 导入；暂不在同一小节改造批量数据库事务**
+- G.4.2 导入接线：`POST /documents` 在路由注册时创建并复用 `Chunker(500, 80)`，每次请求先校验正文，再把一篇长文本转换为多个 `knowledge.Document` 后一次性交给 `DocumentStore.AddDocuments`
+- G.4.2 Chunk 关联：每次原始文档导入生成一个 32 字符逻辑 `document_id`；各 Chunk 分别保存独立 metadata，并用递增 `chunk_index` 保留原文顺序；系统字段在复制用户 metadata 后写入，避免被请求中的同名字段覆盖
+- G.4.2 可见结果：导入 600 个中文字符时，接口返回相同原始文档的 `document_id` 与 `chunks: 2`，数据库写入长度为 500 和 180 的两条记录，第二条包含上一块末尾 80 个字符的重叠内容
+- G.4.2 集成测试：新增 `document_handler_test.go`，使用假 Embedder 隔离外部 API，同时经过真实 Hertz 路由和测试 PostgreSQL 验证空白正文 400、响应分块数、共同 `document_id`、递增 `chunk_index`、来源 metadata 和实际 Chunk 长度
+- G.4.2 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
+- G.4.2 理解验收：能说明 `Chunker` 在路由注册时创建一次并被并发请求安全复用；`Content` 是参与嵌入和检索的知识正文，Metadata 是来源、归属与顺序等附加信息；Go map 是引用类型，因此每个 Chunk 必须复制独立 metadata，避免后续索引修改覆盖此前记录
+- 下一小节：**G.4.3 把 `DocumentStore.AddDocuments` 的多条 INSERT 放进同一事务，保证一批 Chunk 要么全部写入、要么全部回滚**
 
 ## 9. 下一节理解验收题
 
-G.4.1 的集中理解验收已通过。下一小节完成代码和运行验证后，再围绕 Handler 的职责、Chunker 的调用位置以及多个 Chunk 如何交给 DocumentStore 进行集中验收。
+G.4.2 的集中理解验收已通过。下一小节完成后，再围绕批量写入为什么需要事务、事务边界应放在哪里，以及 `defer Rollback + Commit` 的语义进行集中验收。
 
 ## 10. 历史路线处理
 
