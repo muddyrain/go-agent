@@ -214,7 +214,7 @@ func TestNewToolCallbackIgnoresNonToolComponents(t *testing.T) {
 // --- 静态页面路由测试（内存测试）---
 
 func TestIndexHandlerReturnsHTML(t *testing.T) {
-	h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080")
+	h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080", nil)
 	resp := ut.PerformRequest(h.Engine, "GET", "/", nil)
 
 	if resp.Code != 200 {
@@ -256,7 +256,7 @@ func TestChatHandlerReturnsAgentAnswer(t *testing.T) {
 		},
 	}
 
-	h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080")
+	h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080", nil)
 	resp := postJSONToEngine(t, h, "/chat", `{"message":"  hello  "}`)
 
 	if resp.Code != 200 {
@@ -302,7 +302,7 @@ func TestChatHandlerRejectsInvalidRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080")
+			h := NewServer(fakeGenerator{}, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080", nil)
 			resp := postJSONToEngine(t, h, "/chat", tt.body)
 
 			if resp.Code != tt.wantStatus {
@@ -341,7 +341,7 @@ func TestChatHandlerReturnsBadGatewayWhenAgentFails(t *testing.T) {
 					return tt.response, tt.err
 				},
 			}
-			h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080")
+			h := NewServer(generator, "system prompt", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080", nil)
 			resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
 
 			if resp.Code != 502 {
@@ -531,7 +531,7 @@ func TestChatHandlerMultiTurnPreservesHistory(t *testing.T) {
 	}
 
 	sessionManager := NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute)
-	h := NewServer(generator, "你是助手", sessionManager, "127.0.0.1:8080")
+	h := NewServer(generator, "你是助手", sessionManager, "127.0.0.1:8080", nil)
 
 	// 第一轮：创建会话
 	resp1 := postJSONToEngine(t, h, "/chat", `{"message":"我叫小明"}`)
@@ -606,7 +606,7 @@ func TestChatHandlerNewSessionWithoutID(t *testing.T) {
 		},
 	}
 
-	h := NewServer(generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080")
+	h := NewServer(generator, "system", NewSessionManager(NewPostgresSessionRepository(getTestDB(t)), 20, 30*time.Minute, 5*time.Minute), "127.0.0.1:8080", nil)
 
 	resp := postJSONToEngine(t, h, "/chat", `{"message":"hello"}`)
 	if resp.Code != 200 {

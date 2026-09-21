@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"agenthub/internal/knowledge"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -92,6 +93,7 @@ func NewServer(
 	systemPrompt string,
 	sessionManager *SessionManager,
 	address string,
+	documentStore *knowledge.DocumentStore, // 新增参数
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
 
@@ -104,6 +106,9 @@ func NewServer(
 	h.POST("/chat/stream", func(ctx context.Context, c *app.RequestContext) {
 		streamChatHandler(ctx, c, reactAgent, systemPrompt, sessionManager, address)
 	})
+
+	// 新增：注册文档导入路由
+	registerDocumentRoutes(h, documentStore)
 
 	return h
 }
@@ -329,10 +334,11 @@ func Run(
 	address string,
 	ctx context.Context,
 	port int,
+	documentStore *knowledge.DocumentStore,
 ) error {
 
 	address = fmt.Sprintf("127.0.0.1:%d", port)
-	h := NewServer(reactAgent, systemPrompt, sessionManager, address)
+	h := NewServer(reactAgent, systemPrompt, sessionManager, address, documentStore)
 
 	log.Printf("HTTP server listening on http://%s", address)
 

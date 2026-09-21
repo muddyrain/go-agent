@@ -230,7 +230,7 @@ func run() error {
 	sessionManager.StartCleanup(ctx)
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
-		return httpapi.Run(reactAgent, systemPrompt, sessionManager, "", ctx, cfg.HTTPPort)
+		return httpapi.Run(reactAgent, systemPrompt, sessionManager, "", ctx, cfg.HTTPPort, documentStore)
 	}
 
 	return cli.Run(ctx, reactAgent, toolCatalog, systemPrompt, os.Stdin, os.Stdout)
