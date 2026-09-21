@@ -172,7 +172,7 @@ usage: input=0 output=0 total=0
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
-| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1-G.3 已掌握，下一节 G.4 文档分块与批量导入 |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1 已掌握，下一小节 G.4.2 把分块接入文档导入 API |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**F.5 已完成；支持从 YAML 配置文件读取配置（configs/config.<env>.yaml），配置优先级为环境变量 > 配置文件 > 默认值，按环境自动加载不同配置文件（development/production），配置文件不存在时静默降级用默认值+环境变量，fileConfig 结构体带 yaml tag，mergeFileConfig 只覆盖非零值字段，引入 gopkg.in/yaml.v3 依赖，.env 只保留敏感信息（模型 API Key），非敏感配置移到配置文件可版本控制。Phase F 全部完成，下一节 Phase G.1 知识库与 RAG 基础（pgvector + 文档向量化 + 基础检索）。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1-G.3**
+- 当前路线决策：**G.4 拆成连续可运行小节推进；G.4.1 已完成独立文本分块器，下一小节只把分块结果接入文档导入 API，暂不同时改造批量数据库事务。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -439,13 +439,15 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - F.5 可见结果：修改 `configs/config.development.yaml` 里的 `http_port: 9090`，启动服务日志显示 `http_port=9090`（从配置文件读取）；设置 `AGENTHUB_HTTP_PORT=7777` 启动，日志显示 `http_port=7777`（环境变量覆盖配置文件）；指定不存在的配置文件路径启动不报错，用默认值；`.env` 只保留模型配置，其他配置从文件读取
 - F.5 验证：`go fmt ./...`、`go vet ./...`、`go build ./...`、`go test ./... -count=1` 全部通过；全项目 18 个测试包全部 ok
 - F.5 理解验收：能说明配置优先级（环境变量 > 配置文件 > 默认值）及原因（敏感信息用环境变量注入不写在代码/文件里，非敏感配置写文件可版本控制，默认值让开发环境开箱即用）、YAML tag 的作用（`yaml:"http_port"` 告诉解析器结构体字段对应 YAML 里的哪个 key）、为什么 mergeFileConfig 只覆盖非零值（配置文件可以只写需要修改的项，不需要写全所有项，零值表示没设置）、配置文件不存在时为什么静默降级而不是报错（开发环境可能没有配置文件，用默认值+环境变量也能跑，不应该因为缺少可选配置文件而启动失败）、多环境配置的意义（不同环境用不同配置文件，通过 AGENTHUB_ENV 切换，不需要改代码）、.env 和配置文件的分工（.env 放敏感信息不提交，配置文件放非敏感信息可提交共享）
-- 下一节：**Phase G.1 知识库与 RAG 基础**
-- 下一节只做：引入 pgvector 扩展，文档向量化存储，基础检索（相似度搜索），Agent 调用检索工具回答私有文档问题；不做文档分片策略、重排序、混合检索、多模态嵌入
-- 下一节明确不做：文档分片策略、重排序（Rerank）、混合检索（BM25+向量）、多模态嵌入、增量索引、文档版本管理
+- G.4.1 文本分块器：新增 `internal/knowledge.Chunker`，用 `maxChunkChars` 和 `overlapChars` 定义固定字符滑动窗口；构造函数拒绝非正最大长度、负重叠以及重叠不小于最大长度的配置，保证步长始终大于零
+- G.4.1 Unicode 边界：`Chunk` 将字符串转换为 `[]rune` 后再切片，避免按 UTF-8 字节下标切坏中文；纯空白文本返回 `nil`，生成到文本末尾后用 `break` 结束循环，避免产生只含重叠内容的多余块
+- G.4.1 最小测试：`chunker_test.go` 覆盖非法配置、空白和短文本、中文字符及相邻窗口重叠；`go test ./internal/knowledge -count=1`、`go vet ./internal/knowledge/...`、`go build ./...` 全部通过
+- G.4.1 理解验收：已理解重叠必须小于最大长度是为了保证步长 `maxChunkChars - overlapChars > 0`；Go 的 `len(string)` 和字符串切片按 UTF-8 字节工作，中文分块应转为 `[]rune`；`break` 只负责结束已经到达文本末尾的循环，不涉及资源关闭
+- 下一小节：**G.4.2 把 Chunker 接入 POST /documents，使一篇长文本按多个 Chunk 导入；暂不在同一小节改造批量数据库事务**
 
 ## 9. 下一节理解验收题
 
-F.5 的集中理解验收已通过：学习者能够说明配置优先级（环境变量 > 配置文件 > 默认值）及原因（敏感信息用环境变量注入不写在代码/文件里，非敏感配置写文件可版本控制，默认值让开发环境开箱即用）、YAML tag 的作用（`yaml:"http_port"` 告诉解析器结构体字段对应 YAML 里的哪个 key）、为什么 mergeFileConfig 只覆盖非零值（配置文件可以只写需要修改的项，不需要写全所有项，零值表示没设置）、配置文件不存在时为什么静默降级而不是报错（开发环境可能没有配置文件，用默认值+环境变量也能跑，不应该因为缺少可选配置文件而启动失败）、多环境配置的意义（不同环境用不同配置文件，通过 AGENTHUB_ENV 切换，不需要改代码），以及 .env 和配置文件的分工（.env 放敏感信息不提交，配置文件放非敏感信息可提交共享）。
+G.4.1 的集中理解验收已通过。下一小节完成代码和运行验证后，再围绕 Handler 的职责、Chunker 的调用位置以及多个 Chunk 如何交给 DocumentStore 进行集中验收。
 
 ## 10. 历史路线处理
 
