@@ -55,7 +55,14 @@ func (s *DocumentStore) AddDocuments(ctx context.Context, docs []Document) error
 		return fmt.Errorf("embed documents: %w", err)
 	}
 
-	// 2. 批量插入数据库
+	// 2. 开启事务，保证一批文档要么全部写入，要么全部回滚。
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin add documents transaction: %w", err)
+	}
+	defer tx.Rollback(ctx) // Commit 成功后再次 Rollback 是无害的。
+
+	// 3. 在同一个事务中插入全部文档。
 	for i, doc := range docs {
 		embeddingStr := vectorToString(embeddings[i])
 
@@ -67,13 +74,21 @@ func (s *DocumentStore) AddDocuments(ctx context.Context, docs []Document) error
 			}
 		}
 
-		_, err = s.db.Exec(ctx,
+		_, err = tx.Exec(
+			ctx,
 			`INSERT INTO documents (content, embedding, metadata) VALUES ($1, $2::vector, $3)`,
-			doc.Content, embeddingStr, metadataJSON,
+			doc.Content,
+			embeddingStr,
+			metadataJSON,
 		)
 		if err != nil {
 			return fmt.Errorf("insert document %d: %w", i, err)
 		}
+	}
+
+	// 4. 只有全部 INSERT 成功后才提交事务。
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit add documents transaction: %w", err)
 	}
 
 	return nil

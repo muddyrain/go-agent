@@ -172,7 +172,7 @@ usage: input=0 output=0 total=0
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
-| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1—G.4.2 已掌握，下一小节 G.4.3 保证多 Chunk 批量写入的原子性 |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1—G.4.3 已掌握，下一节 G.5 让知识库回答展示来源引用 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**G.4 拆成连续可运行小节推进；G.4.1 已完成独立文本分块器，G.4.2 已把分块接入文档导入 API，下一小节只解决多 Chunk 写入中途失败会留下半批数据的问题。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1—G.4.2**
+- 当前路线决策：**G.4.1—G.4.3 已完成文档分块、API 接线和批量写入原子性；G.4 收口，下一节进入 G.5，让 Agent 回答能够展示命中文档的来源引用。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1—G.4.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -449,11 +449,16 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - G.4.2 集成测试：新增 `document_handler_test.go`，使用假 Embedder 隔离外部 API，同时经过真实 Hertz 路由和测试 PostgreSQL 验证空白正文 400、响应分块数、共同 `document_id`、递增 `chunk_index`、来源 metadata 和实际 Chunk 长度
 - G.4.2 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
 - G.4.2 理解验收：能说明 `Chunker` 在路由注册时创建一次并被并发请求安全复用；`Content` 是参与嵌入和检索的知识正文，Metadata 是来源、归属与顺序等附加信息；Go map 是引用类型，因此每个 Chunk 必须复制独立 metadata，避免后续索引修改覆盖此前记录
-- 下一小节：**G.4.3 把 `DocumentStore.AddDocuments` 的多条 INSERT 放进同一事务，保证一批 Chunk 要么全部写入、要么全部回滚**
+- G.4.3 原子写入：`DocumentStore.AddDocuments` 在外部嵌入调用完成后才开启 PostgreSQL 事务，所有 Chunk 使用同一个 `tx.Exec` 写入，全部成功后显式 `Commit`；任意 metadata 序列化或 INSERT 失败都会通过延迟 `Rollback` 撤销整批修改
+- G.4.3 事务边界：事务只包围必须原子执行的数据库 INSERT，不把耗时且不受数据库控制的嵌入 API 调用放进事务，减少数据库连接与事务占用时间；调用方仍只依赖一次 `AddDocuments`，不感知事务细节
+- G.4.3 回归测试：新增 `TestDocumentStore_AddDocumentsRollsBackWholeBatch`，构造第一条合法 1024 维向量和第二条非法 2 维向量，确认第二条 INSERT 失败后第一条也被回滚，数据库最终记录数为 0
+- G.4.3 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
+- G.4.3 理解验收：已理解 `tx.Exec` 会立即在 PostgreSQL 当前事务中执行 SQL，`Commit` 负责确认并永久保留结果，`Rollback` 负责撤销已执行但未提交的结果；循环必须使用 `tx.Exec`，使用 `s.db.Exec` 会绕开事务并独立提交
+- 下一节：**G.5 让 `search_knowledge` 返回可供 Agent 展示的来源信息，使知识库回答从“有依据”推进到“用户能看到依据来自哪里”**
 
 ## 9. 下一节理解验收题
 
-G.4.2 的集中理解验收已通过。下一小节完成后，再围绕批量写入为什么需要事务、事务边界应放在哪里，以及 `defer Rollback + Commit` 的语义进行集中验收。
+G.4.3 的集中理解验收已通过，G.4 文档分块与批量导入完成。下一节完成后，再围绕来源信息应放在 Content 还是 Metadata、检索工具如何把来源传给模型，以及回答引用与向量相似度的职责边界进行集中验收。
 
 ## 10. 历史路线处理
 

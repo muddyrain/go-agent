@@ -50,6 +50,41 @@ func padTo1024(vec []float32) []float32 {
 	return padded
 }
 
+// EmbedderFunc 让测试可以用函数构造特定的嵌入结果。
+type EmbedderFunc func(ctx context.Context, texts []string) ([][]float32, error)
+
+func (f EmbedderFunc) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	return f(ctx, texts)
+}
+
+func TestDocumentStore_AddDocumentsRollsBackWholeBatch(t *testing.T) {
+	db := getTestDB(t)
+	ctx := context.Background()
+
+	store := NewDocumentStore(db, EmbedderFunc(func(_ context.Context, _ []string) ([][]float32, error) {
+		return [][]float32{
+			padTo1024([]float32{0.1, 0.2, 0.3}), // 第一条维度合法，INSERT 能成功
+			{0.1, 0.2},                          // 第二条不是 1024 维，INSERT 会失败
+		}, nil
+	}))
+
+	err := store.AddDocuments(ctx, []Document{
+		{Content: "第一个片段"},
+		{Content: "第二个片段"},
+	})
+	if err == nil {
+		t.Fatal("AddDocuments() error = nil, want second INSERT to fail")
+	}
+
+	var count int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM documents").Scan(&count); err != nil {
+		t.Fatalf("count documents after rollback: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("documents after rollback = %d, want 0", count)
+	}
+}
+
 func TestDocumentStore_AddAndSearch(t *testing.T) {
 	db := getTestDB(t)
 
