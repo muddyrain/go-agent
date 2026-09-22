@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；下一节 H.2 确定性 Workflow |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**Phase G 已完成：知识文档可以经 API 分块、批量向量化、原子写入，并由 Agent 检索后在最终回答中展示来源；下一节进入 Phase H.1，先选择一个有基线对照、可观察的 Workflow 编排场景。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5**
+- 当前阶段：**Phase H：Workflow 与 Multi-Agent**
+- 当前路线决策：**H.1 已用“研究并生成知识库文档删除与重新导入技术方案”运行当前单 Agent 基线；同步路径因超过最大步骤失败，流式路径虽返回 done 但没有调用工具、没有交付方案，证明需要用确定性 Workflow 固定分析、证据、方案和审查阶段。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -466,11 +466,16 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - G.5.2 规则测试：新增 `TestSystemPromptRequiresKnowledgeSourceCitation`，固定必须调用知识库工具、使用来源格式、只能引用工具结果中来源、来源未知时如实说明四项应用级契约
 - G.5.2 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过；启动时发现本地 `schema_migrations` 被错误记录为版本 0，在确认版本 1—2 对应表均存在且保留已有文档数据后，用 `migrate force 2` 仅校准迁移元数据，并验证服务在 8089 正常启动
 - G.5.2 理解验收：能说明 ToolMessage 提供证据但模型可能忽略；Tool 描述用于工具识别与使用说明，System Prompt 约束 Agent 整体决策和回答；提示词不能从程序层面 100% 防止模型编造来源，若要确定性保证，需要由服务端根据真实检索结果生成结构化引用并独立校验
-- 下一节：**Phase H.1 选择首个 Workflow 编排场景：先建立单 Agent 基线，再用 Eino Graph/Workflow 解决一个确有多步骤依赖的问题，不为展示框架而空造编排**
+- H.1 基准场景：固定任务为“分析当前 AgentHub 代码并设计知识库文档删除与重新导入技术方案”，要求覆盖当前数据模型与调用链依据、API、事务一致性、失败处理、最小测试和明确非目标，且只能引用实际读取的文件路径
+- H.1 同步基线：通过 `POST /chat` 执行时，单 Agent 在完成方案前返回 HTTP 502，服务端记录 `[GraphRunError] exceeds max steps`；说明复杂任务的自由工具循环可能耗尽步骤上限，且失败时没有阶段级定位信息
+- H.1 流式基线：相同任务通过 `POST /chat/stream` 在 12.98 秒后返回 HTTP 200 和 done，但 142 个 chunk 中只有 23 个非空内容、工具事件数为 0，最终只输出“我将先读取代码……让我先探索项目结构”，没有读取代码或交付技术方案
+- H.1 基线结论：HTTP/SSE 成功不等于业务任务完成；当前单 Agent 无法稳定保证“分析现状 → 收集证据 → 生成方案 → 审查遗漏”的阶段顺序和完成条件，因此 H.2 引入确定性 Workflow 有真实失败证据，而不是为了展示框架
+- H.1 学习资产：新增 [`docs/images/h1-single-agent-baseline.svg`](docs/images/h1-single-agent-baseline.svg)，记录同步失败、流式假成功及 H.2 的编排依据
+- 下一节：**H.2 确定性 Workflow：用 Eino Graph/Workflow 固定“分析任务 → 读取代码证据 → 生成技术方案 → 审查完整性”四个节点，并让节点输出、失败位置和完成条件可观察**
 
 ## 9. 下一节理解验收题
 
-G.5.2 的集中理解验收已通过，Phase G 完成。下一节先围绕“什么任务值得用 Workflow、单 Agent 基线是什么、哪些步骤必须串行或可并行”确定首个编排场景，再进入代码实现。
+H.1 不新增运行时代码，基线验收已完成。下一节完成后，围绕 Workflow 与 ReAct 自由循环的区别、状态如何在节点之间传递、为什么证据节点必须先于方案节点，以及节点失败如何被定位进行集中验收。
 
 ## 10. 历史路线处理
 

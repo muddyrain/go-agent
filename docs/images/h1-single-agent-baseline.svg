@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 680" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">H.1 单 Agent 技术方案基线</title>
+  <desc id="desc">展示同一复杂技术方案任务的两次单 Agent 运行结果：同步请求超过最大步骤失败，流式请求未调用工具且只输出准备探索，未交付方案。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#47796b"/>
+    </marker>
+    <style>
+      .title { font: 700 30px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; fill:#17362d; }
+      .subtitle { font: 16px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; fill:#60756e; }
+      .heading { font: 700 20px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; }
+      .body { font: 16px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; fill:#29463e; }
+      .small { font: 14px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; fill:#60756e; }
+      .metric { font: 700 18px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="680" fill="#f6faf8"/>
+  <text x="60" y="60" class="title">H.1 单 Agent 技术方案基线</text>
+  <text x="60" y="92" class="subtitle">固定任务：分析当前代码并设计“知识库文档删除与重新导入”方案</text>
+
+  <rect x="60" y="130" width="1080" height="90" rx="14" fill="#ffffff" stroke="#adc8bf" stroke-width="2"/>
+  <text x="90" y="166" class="heading" fill="#245f50">验收要求</text>
+  <text x="90" y="197" class="body">读取真实代码 → 给出数据模型与调用链 → API → 事务一致性 → 失败处理 → 最小测试 → 非目标</text>
+
+  <line x1="600" y1="220" x2="600" y2="260" stroke="#47796b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="60" y="275" width="510" height="250" rx="16" fill="#fff3f1" stroke="#da8c80" stroke-width="2"/>
+  <text x="90" y="315" class="heading" fill="#9a382a">运行 A：同步 /chat</text>
+  <text x="90" y="355" class="body">Agent 尝试自主规划、选择并多次调用工具</text>
+  <text x="90" y="393" class="metric" fill="#9a382a">结果：HTTP 502</text>
+  <text x="90" y="425" class="body">错误：GraphRunError — exceeds max steps</text>
+  <text x="90" y="465" class="small">暴露问题：复杂任务的步骤数量不可控，直到耗尽</text>
+  <text x="90" y="489" class="small">Agent 步数上限才知道失败，无法定位缺失阶段。</text>
+
+  <rect x="630" y="275" width="510" height="250" rx="16" fill="#fff8ed" stroke="#d8ae70" stroke-width="2"/>
+  <text x="660" y="315" class="heading" fill="#8a571d">运行 B：流式 /chat/stream</text>
+  <text x="660" y="355" class="body">HTTP 200，耗时 12.98 秒，收到 done 事件</text>
+  <text x="660" y="393" class="metric" fill="#8a571d">工具事件：0</text>
+  <text x="660" y="425" class="body">输出：我将先读取代码……让我先探索项目结构。</text>
+  <text x="660" y="465" class="small">暴露问题：传输成功不等于任务成功；模型只输出</text>
+  <text x="660" y="489" class="small">计划性话术，没有读取代码，也没有交付技术方案。</text>
+
+  <line x1="315" y1="525" x2="315" y2="565" stroke="#47796b" stroke-width="3" marker-end="url(#arrow)"/>
+  <line x1="885" y1="525" x2="885" y2="565" stroke="#47796b" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="180" y="575" width="840" height="70" rx="14" fill="#e7f6f0" stroke="#4a967e" stroke-width="2"/>
+  <text x="600" y="605" text-anchor="middle" class="heading" fill="#176a53">H.2 引入确定性 Workflow 的证据</text>
+  <text x="600" y="631" text-anchor="middle" class="body">固定阶段、显式节点输入输出、失败定位和完成条件，而不是继续增加单 Agent 的自由步骤。</text>
+</svg>
