@@ -172,7 +172,7 @@ usage: input=0 output=0 total=0
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
-| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.3、G.4.1—G.4.3 已掌握，下一节 G.5 让知识库回答展示来源引用 |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.4、G.5.1 已掌握，下一小节 G.5.2 验证并约束最终回答展示来源 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**G.4.1—G.4.3 已完成文档分块、API 接线和批量写入原子性；G.4 收口，下一节进入 G.5，让 Agent 回答能够展示命中文档的来源引用。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.3、G.4.1—G.4.3**
+- 当前路线决策：**G.5 拆成来源数据贯通与最终回答验证两个小节；G.5.1 已把 `source`、`document_id`、`chunk_index` 从检索结果写入 ToolMessage，下一小节验证并约束模型最终回答展示实际来源。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.4、G.5.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -454,11 +454,17 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - G.4.3 回归测试：新增 `TestDocumentStore_AddDocumentsRollsBackWholeBatch`，构造第一条合法 1024 维向量和第二条非法 2 维向量，确认第二条 INSERT 失败后第一条也被回滚，数据库最终记录数为 0
 - G.4.3 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
 - G.4.3 理解验收：已理解 `tx.Exec` 会立即在 PostgreSQL 当前事务中执行 SQL，`Commit` 负责确认并永久保留结果，`Rollback` 负责撤销已执行但未提交的结果；循环必须使用 `tx.Exec`，使用 `s.db.Exec` 会绕开事务并独立提交
-- 下一节：**G.5 让 `search_knowledge` 返回可供 Agent 展示的来源信息，使知识库回答从“有依据”推进到“用户能看到依据来自哪里”**
+- G.5.1 来源贯通：`search_knowledge` 从每条 `SearchResult.Document.Metadata` 安全读取 `source`、`document_id` 和 `chunk_index`，与相似度及正文一起格式化为普通字符串返回给 Eino；缺少来源时明确输出“来源未知”，避免模型自行编造
+- G.5.1 类型边界：新增 `metadataString` 与 `metadataInt` 处理 `map[string]any` 的安全读取，其中 JSONB 数字反序列化后可能为 `float64`；`strings.Builder` 只负责高效累积文本，`sb.String()` 取出普通字符串，函数 `return` 才把结果交给 Eino 生成 ToolMessage
+- G.5.1 工具约束：更新 `search_knowledge` 描述，要求模型先检索再回答，并在相关结论后标注实际使用的来源；来源缺失时如实说明，禁止编造
+- G.5.1 最小测试：新增 `search_tool_test.go`，直接调用 Eino `InvokableTool`，验证真实来源、未知来源、文档 ID、分块序号、相似度和正文均进入工具结果，并验证 `metadataInt` 兼容 `int`、JSON `float64` 与错误类型
+- G.5.1 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
+- G.5.1 理解验收：能说明 `InferTool` 第三个参数是工具 Handler；Metadata map 是结构化来源数据，`strings.Builder` 是字符串组合器，`WriteString` 负责追加、`String()` 负责取出、`return` 负责将结果交给 Eino
+- 下一小节：**G.5.2 通过真实 Agent 调用验证最终回答展示来源，并把“仅引用实际命中来源”的要求固定在 Agent 指令与测试中**
 
 ## 9. 下一节理解验收题
 
-G.4.3 的集中理解验收已通过，G.4 文档分块与批量导入完成。下一节完成后，再围绕来源信息应放在 Content 还是 Metadata、检索工具如何把来源传给模型，以及回答引用与向量相似度的职责边界进行集中验收。
+G.5.1 的集中理解验收已通过。下一小节完成后，再围绕 ToolMessage 中的来源信息为什么不等于最终回答已可靠引用、System Prompt 与 Tool 描述分别约束什么，以及如何验证模型没有编造未命中的来源进行集中验收。
 
 ## 10. 历史路线处理
 
