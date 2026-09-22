@@ -3,8 +3,24 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestSystemPromptRequiresKnowledgeSourceCitation(t *testing.T) {
+	requiredRules := []string{
+		"必须调用 search_knowledge 工具",
+		"来源：<source>",
+		"只能引用工具结果中出现的来源",
+		"如果工具结果显示“来源未知”，必须明确说明来源未知",
+	}
+
+	for _, rule := range requiredRules {
+		if !strings.Contains(systemPrompt, rule) {
+			t.Fatalf("systemPrompt does not contain required knowledge citation rule %q", rule)
+		}
+	}
+}
 
 func TestLoadLocalEnv(t *testing.T) {
 	const key = "AGENTHUB_TEST_ENV_PRIORITY"

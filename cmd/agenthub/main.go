@@ -26,6 +26,18 @@ import (
 const (
 	httpServerMode = "serve"
 	mcpServerMode  = "mcp-server"
+
+	systemPrompt = "你是 AgentHub 项目助手。" +
+		"当用户要求读取、查看、分析或总结项目文件时，" +
+		"必须直接调用 read_project_file 工具，" +
+		"不要在工具调用前输出计划或说明文字。" +
+		"当用户询问公司内部文档、项目规范、员工手册、产品说明等私有知识库内容时，" +
+		"必须调用 search_knowledge 工具，并且只能根据工具返回的内容回答。" +
+		"使用 search_knowledge 回答时，必须在相关结论后使用“来源：<source>”标注实际使用的来源；" +
+		"只能引用工具结果中出现的来源，不得编造、猜测或补全来源；" +
+		"如果工具结果显示“来源未知”，必须明确说明来源未知。" +
+		"如果回答既不依赖项目文件，也不依赖私有知识库，" +
+		"则直接回答，不要调用工具。"
 )
 
 func main() {
@@ -129,14 +141,9 @@ func run() error {
 			log.Printf("close MCP servers: %v", err)
 		}
 	}()
-	const systemPrompt = "你是 AgentHub 项目助手。" +
-		"当用户要求读取、查看、分析或总结项目文件时，" +
-		"必须直接调用 read_project_file 工具，" +
-		"不要在工具调用前输出计划或说明文字。" +
-		"如果回答不依赖项目文件，则直接回答，不要调用工具。"
 
-		// ParseConfig 解析连接字符串，返回可修改的配置对象。
-		// 然后手动设置各个参数，替代 pgxpool.New 的默认配置。
+	// ParseConfig 解析连接字符串，返回可修改的配置对象。
+	// 然后手动设置各个参数，替代 pgxpool.New 的默认配置。
 	dbConfig, err := pgxpool.ParseConfig(cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("parse database config: %w", err)

@@ -172,7 +172,7 @@ usage: input=0 output=0 total=0
 | Phase D：工具中心与 MCP | 本地工具难扩展，MCP 还没有真实连接 | 可发现、调用和诊断真实 MCP 工具 | Eino + AgentHub MCP 配置层 | 暂停：D.1—D.3 已掌握，D.4 第一阶段已实现；后续稳定性按真实故障补齐 |
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
-| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 进行中：G.1—G.4、G.5.1 已掌握，下一小节 G.5.2 验证并约束最终回答展示来源 |
+| Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 待开始 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase G：知识库与 RAG**
-- 当前路线决策：**G.5 拆成来源数据贯通与最终回答验证两个小节；G.5.1 已把 `source`、`document_id`、`chunk_index` 从检索结果写入 ToolMessage，下一小节验证并约束模型最终回答展示实际来源。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.4、G.5.1**
+- 当前路线决策：**Phase G 已完成：知识文档可以经 API 分块、批量向量化、原子写入，并由 Agent 检索后在最终回答中展示来源；下一节进入 Phase H.1，先选择一个有基线对照、可观察的 Workflow 编排场景。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -460,11 +460,17 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - G.5.1 最小测试：新增 `search_tool_test.go`，直接调用 Eino `InvokableTool`，验证真实来源、未知来源、文档 ID、分块序号、相似度和正文均进入工具结果，并验证 `metadataInt` 兼容 `int`、JSON `float64` 与错误类型
 - G.5.1 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过
 - G.5.1 理解验收：能说明 `InferTool` 第三个参数是工具 Handler；Metadata map 是结构化来源数据，`strings.Builder` 是字符串组合器，`WriteString` 负责追加、`String()` 负责取出、`return` 负责将结果交给 Eino
-- 下一小节：**G.5.2 通过真实 Agent 调用验证最终回答展示来源，并把“仅引用实际命中来源”的要求固定在 Agent 指令与测试中**
+- G.5.2 Agent 约束：将 `systemPrompt` 从 `run()` 局部常量提升为 `package main` 的包级常量，在项目文件规则之外新增知识库规则：私有知识问题必须调用 `search_knowledge`，只能根据工具结果回答，并以“来源：<source>”标注实际命中来源；来源未知时如实说明
+- G.5.2 职责边界：Tool 描述负责告诉模型工具何时使用、参数和结果含义；System Prompt 负责整个 Agent 的工具选择与最终回答规范；ToolMessage 已含来源并不代表模型必然展示来源，因此两层约束都需要
+- G.5.2 真实验证：向知识库导入 `g5-citation-demo.md` 后，通过 `POST /chat` 提问“蓝鲸计划的发布冻结窗口是什么”，真实模型回答“每周五18:00至周一09:00”，并展示 `来源：g5-citation-demo.md` 及真实文档 ID；验证后测试文档已删除，数据库匹配记录数为 0
+- G.5.2 规则测试：新增 `TestSystemPromptRequiresKnowledgeSourceCitation`，固定必须调用知识库工具、使用来源格式、只能引用工具结果中来源、来源未知时如实说明四项应用级契约
+- G.5.2 验证：`go test ./... -count=1`、`go vet ./...`、`go build ./...` 与 `git diff --check` 全部通过；启动时发现本地 `schema_migrations` 被错误记录为版本 0，在确认版本 1—2 对应表均存在且保留已有文档数据后，用 `migrate force 2` 仅校准迁移元数据，并验证服务在 8089 正常启动
+- G.5.2 理解验收：能说明 ToolMessage 提供证据但模型可能忽略；Tool 描述用于工具识别与使用说明，System Prompt 约束 Agent 整体决策和回答；提示词不能从程序层面 100% 防止模型编造来源，若要确定性保证，需要由服务端根据真实检索结果生成结构化引用并独立校验
+- 下一节：**Phase H.1 选择首个 Workflow 编排场景：先建立单 Agent 基线，再用 Eino Graph/Workflow 解决一个确有多步骤依赖的问题，不为展示框架而空造编排**
 
 ## 9. 下一节理解验收题
 
-G.5.1 的集中理解验收已通过。下一小节完成后，再围绕 ToolMessage 中的来源信息为什么不等于最终回答已可靠引用、System Prompt 与 Tool 描述分别约束什么，以及如何验证模型没有编造未命中的来源进行集中验收。
+G.5.2 的集中理解验收已通过，Phase G 完成。下一节先围绕“什么任务值得用 Workflow、单 Agent 基线是什么、哪些步骤必须串行或可并行”确定首个编排场景，再进入代码实现。
 
 ## 10. 历史路线处理
 
