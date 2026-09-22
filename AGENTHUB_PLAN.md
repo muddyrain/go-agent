@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已用“研究并生成知识库文档删除与重新导入技术方案”运行当前单 Agent 基线；同步路径因超过最大步骤失败，流式路径虽返回 done 但没有调用工具、没有交付方案，证明需要用确定性 Workflow 固定分析、证据、方案和审查阶段。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1 已完成 `START → analyze_task → END` 的首个可执行 Eino Workflow，用结构化验收清单固定业务完成标准；下一小节 H.2.2 只加入代码证据节点。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -471,11 +471,18 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.1 流式基线：相同任务通过 `POST /chat/stream` 在 12.98 秒后返回 HTTP 200 和 done，但 142 个 chunk 中只有 23 个非空内容、工具事件数为 0，最终只输出“我将先读取代码……让我先探索项目结构”，没有读取代码或交付技术方案
 - H.1 基线结论：HTTP/SSE 成功不等于业务任务完成；当前单 Agent 无法稳定保证“分析现状 → 收集证据 → 生成方案 → 审查遗漏”的阶段顺序和完成条件，因此 H.2 引入确定性 Workflow 有真实失败证据，而不是为了展示框架
 - H.1 学习资产：新增 [`docs/images/h1-single-agent-baseline.svg`](docs/images/h1-single-agent-baseline.svg)，记录同步失败、流式假成功及 H.2 的编排依据
-- 下一节：**H.2 确定性 Workflow：用 Eino Graph/Workflow 固定“分析任务 → 读取代码证据 → 生成技术方案 → 审查完整性”四个节点，并让节点输出、失败位置和完成条件可观察**
+- H.2.1 应用边界：新增 `internal/techproposal` 包，承载“研究并生成技术方案”这个具体应用 Workflow；不把编排逻辑堆进 `cmd/agenthub`，也不自建通用 Workflow 框架
+- H.2.1 类型契约：`ProposalRequest` 定义 Workflow 输入，`TaskAnalysis` 定义分析节点输出；结构体既为后续扩展预留明确字段，也让节点间数据传递由 Go/Eino 在编译期检查，而不是使用运行时不安全的 `map[string]any`
+- H.2.1 分析节点：`analyzeTask` 校验 Context 和空白任务，把原始请求转换为包含交付物、6 个必需章节和 3 个证据要求的结构化验收清单；第一版使用确定性 Go 逻辑，不同时引入模型结构化输出
+- H.2.1 Workflow 骨架：`NewWorkflow[ProposalRequest, TaskAnalysis]` 声明整体输入输出，`InvokableLambda` 把普通 Go 函数包装为节点，`AddInput(START)` 与 `End().AddInput` 同时建立执行顺序和完整对象传递，`Compile` 生成可执行 `Runnable`
+- H.2.1 执行语义：`NewAnalysisWorkflow` 只创建并编译流程，`Runnable.Invoke` 才执行一次具体任务；真实运行链路为 `ProposalRequest → START → analyze_task → TaskAnalysis → END`
+- H.2.1 最小测试：新增 `workflow_test.go`，验证有效任务生成结构化要求、空任务在分析节点失败、已取消 Context 能传播到节点；`go test ./internal/techproposal`、`go vet ./internal/techproposal/...` 和 `go build ./...` 全部通过
+- H.2.1 理解验收：能说明当前新增结构体是节点输入输出的数据契约，而非最终方案；首个 Workflow 只有一个节点是为了先理解类型流、Compile 与 Invoke，后续再由真实失败逐步接入证据、方案和审查节点
+- 下一小节：**H.2.2 代码证据节点：在 `analyze_task` 后加入 `collect_evidence`，依据分析结果读取一组明确的项目文件，并输出带文件路径的结构化代码证据**
 
 ## 9. 下一节理解验收题
 
-H.1 不新增运行时代码，基线验收已完成。下一节完成后，围绕 Workflow 与 ReAct 自由循环的区别、状态如何在节点之间传递、为什么证据节点必须先于方案节点，以及节点失败如何被定位进行集中验收。
+H.2.1 已掌握。下一小节完成后，围绕为什么证据节点必须接收分析结果、为什么由 Workflow 固定读取范围而不是让模型无限探索、文件读取错误如何归属到具体节点，以及证据如何传给后续方案节点进行集中验收。
 
 ## 10. 历史路线处理
 
