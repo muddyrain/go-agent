@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；下一节 H.2 确定性 Workflow |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1 分析节点、H.2.2 代码证据节点已掌握；下一节 H.2.3 方案生成节点 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1 已完成 `START → analyze_task → END` 的首个可执行 Eino Workflow，用结构化验收清单固定业务完成标准；下一小节 H.2.2 只加入代码证据节点。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1 完成 `analyze_task` 分析节点；H.2.2 完成 `collect_evidence` 代码证据节点，Workflow 为 `START → analyze_task → collect_evidence → END`，按分析结果确定性读取 6 个项目文件；下一小节 H.2.3 加入模型方案生成节点。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -478,11 +478,18 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.2.1 执行语义：`NewAnalysisWorkflow` 只创建并编译流程，`Runnable.Invoke` 才执行一次具体任务；真实运行链路为 `ProposalRequest → START → analyze_task → TaskAnalysis → END`
 - H.2.1 最小测试：新增 `workflow_test.go`，验证有效任务生成结构化要求、空任务在分析节点失败、已取消 Context 能传播到节点；`go test ./internal/techproposal`、`go vet ./internal/techproposal/...` 和 `go build ./...` 全部通过
 - H.2.1 理解验收：能说明当前新增结构体是节点输入输出的数据契约，而非最终方案；首个 Workflow 只有一个节点是为了先理解类型流、Compile 与 Invoke，后续再由真实失败逐步接入证据、方案和审查节点
-- 下一小节：**H.2.2 代码证据节点：在 `analyze_task` 后加入 `collect_evidence`，依据分析结果读取一组明确的项目文件，并输出带文件路径的结构化代码证据**
+- H.2.2 应用边界：在 `analyze_task` 后新增 `collect_evidence` 节点，Workflow 变为 `ProposalRequest → START → analyze_task → TaskAnalysis → collect_evidence → CollectedEvidence → END`；证据读取由确定性 Go 逻辑完成，不由模型自由探索，直接回应 H.1"单 Agent 自由读文件耗尽 max steps 且假成功"的失败证据
+- H.2.2 类型契约：新增 `EvidenceFile{Path, Content}` 与 `CollectedEvidence{Analysis, Files}`；`TaskAnalysis` 增加 `RequiredFiles []string`，由分析节点决定读哪些文件，证据节点只按清单执行，实现"决策与执行分离"；`CollectedEvidence` 内嵌 `Analysis` 是因为 Workflow 数据只顺流不回流，后续方案节点需要的章节要求与交付物定义必须随证据打包带下去
+- H.2.2 依赖注入：`NewAnalysisWorkflow` 新增 `rootDir string` 参数；Eino 节点 lambda 签名固定为 `func(ctx, I) (O, error)`，无法传入 `rootDir`，故用闭包在构造节点时把 `rootDir` 绑入 `collect`，真实逻辑仍留在包级 `collectEvidence(ctx, analysis, rootDir)` 以便独立单测；不使用包级变量、`os.Getwd()` 或把环境配置塞进请求结构体
+- H.2.2 文件安全边界：`filepath.Join(rootDir, path)` 后必须用 `filepath.Rel(rootDir, abs)` 校验落点仍在 rootDir 内，因为 Join 遇到绝对路径会丢弃 rootDir；`strings.HasPrefix(rel, "..")` 统一拦住绝对路径与 `../` 穿越；单文件超过 `maxEvidenceFileSize`（128 KiB）拒绝读取；读失败用 `fmt.Errorf("collect evidence read %q: %w", path, err)` 包装，节点名与文件路径进入错误信息，`%w` 保留根因供后续 `errors.Is` 判断
+- H.2.2 Eino 连线：`AddLambdaNode` 读函数签名自动推断输入输出类型；`.AddInput(nodeAnalyzeTask)` 把上一节点输出 `TaskAnalysis` 接到下一节点输入；`End().AddInput(nodeCollectEvidence)` 使流程终点与 `Runnable[ProposalRequest, CollectedEvidence]` 泛型一致；`Compile` 在编译期完成类型与完整性检查，连错线在 Compile 阶段暴露而非运行时
+- H.2.2 测试：6 个用例——端到端 3 个（结构化要求、空任务拒绝、取消传播，均传项目根并断言 Files 恰为 6 个非空文件），包级边界 3 个（路径穿越拒绝、文件不存在时错误带路径、超大文件拒绝）；go test/vet/build/gofmt 全部通过
+- H.2.2 理解验收：能说明证据节点为何接收分析结果、为何由 Workflow 固定读取范围而非让模型无限探索、`rootDir` 为何经闭包注入、`%q` 与 `%w` 分别承担什么、Join 后为何必须 Rel 校验、以及 Compile 在何时做类型检查
+- 下一小节：**H.2.3 方案生成节点：在 `collect_evidence` 后加入模型节点，依据 `CollectedEvidence`（分析要求 + 6 份代码证据）生成带章节与来源引用的技术方案，并在服务端做结构化校验**
 
 ## 9. 下一节理解验收题
 
-H.2.1 已掌握。下一小节完成后，围绕为什么证据节点必须接收分析结果、为什么由 Workflow 固定读取范围而不是让模型无限探索、文件读取错误如何归属到具体节点，以及证据如何传给后续方案节点进行集中验收。
+H.2.2 已掌握。下一小节 H.2.3 完成后，围绕模型节点如何接收 `CollectedEvidence`、为什么方案生成不能只靠 prompt 约束而要在服务端做结构化校验、模型输出失败如何归属到节点，以及方案节点与 ReAct Agent 的工具循环有何本质区别进行集中验收。
 
 ## 10. 历史路线处理
 
