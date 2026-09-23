@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow（分析→证据→生成→校验）已掌握；下一节把 Workflow 接到真实入口 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 Workflow 已接到 HTTP 入口（POST /tech-proposal）；下一节 Multi-Agent 场景 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow：`START → analyze_task → collect_evidence → build_prompt → chat_model → validate_proposal → END`，模型输出必须经服务端章节校验才放行；下一节把 Workflow 接到真实入口（HTTP 或 CLI）。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow；H.3 把 Workflow 接到 HTTP 入口：`POST /tech-proposal` 接收 `{task}`，经 handler 调用 `NewAnalysisWorkflow` 返回 `{result}`；下一节进入 Multi-Agent 场景。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -498,11 +498,16 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.2.4 prompt vs 服务端保证：build_prompt 的 system message 只是"要求"模型分章节，模型可能不照做；validate_proposal 是确定性 Go 代码，在服务端检查章节是否真的出现，这是 H.1"HTTP 200 但内容是废话"失败教训的收口
 - H.2.4 测试：端到端 fake 回复含全部章节关键词则通过；缺章节（只写两章）报错含 missing sections；空文本报错含 proposal content is empty；空任务拒绝、取消传播、三个 collectEvidence 边界用例不变；gofmt/vet/build/全项目 test 全过
 - H.2.4 理解验收：能说明为什么需要服务端校验而不能只靠 prompt、章节清单为什么提成包级常量、校验失败为什么直接返回 error 而不是带警告返回、var 和 const 在 slice 上的区别
-- 下一小节：**H.3 把 Workflow 接到真实入口：新增 HTTP 端点（如 `POST /tech-proposal`）调用 NewAnalysisWorkflow，传入真实 chatModel，让确定性 Workflow 能被实际调用并观察完整链路**
+- H.3 接入 HTTP 入口：新建 `internal/httpapi/techproposal_handler.go`，注册 `POST /tech-proposal` 路由；handler 解析 `{task}` 请求体，调用 `workflow.Invoke(ctx, ProposalRequest{Task})`，返回 `{result}` 响应体
+- H.3 依赖注入：`main.go` 创建 `NewAnalysisWorkflow(ctx, projectRoot, chatModel)` 实例，经 `Run` 函数传入 `NewServer`，再注册到 `registerTechProposalRoutes`；chatModel 和 projectRoot 在入口组装，不泄漏到 handler 内部
+- H.3 错误映射：请求体非法或 task 为空返回 400；Workflow 内部失败返回 502 并记录日志；成功返回 200 和方案文本
+- H.3 编译错误根因：①`route.Group` 未定义——Hertz 路由组类型是 `*server.Hertz` 不是 `*route.Group`；②`techproposal` 未定义——import 块漏了 `"agenthub/internal/techproposal"`；③`techproposal.Workflow` 类型不存在——实际返回类型是 `compose.Runnable[ProposalRequest, ProposalResult]`；④测试调 NewServer 少传参数——函数签名变更后所有调用点必须同步
+- H.3 理解验收：能说明 Workflow 如何从 internal 包接到 HTTP handler、chatModel 和 rootDir 在入口处如何组装、Workflow 错误如何映射成 HTTP 状态码、为什么不在 handler 里直接跑 ReAct Agent 而要走确定性 Workflow
+- 下一小节：**H.4 Multi-Agent 场景：引入第二个 Agent，让它和现有 Workflow 协作（如评审 Agent 审查生成的技术方案），观察多 Agent 之间的消息传递和任务分工**
 
 ## 9. 下一节理解验收题
 
-H.2.4 已掌握。下一小节 H.3（接入真实入口）完成后，围绕 Workflow 如何从 internal 包接到 HTTP handler、chatModel 和 rootDir 在入口处如何组装、Workflow 错误如何映射成 HTTP 状态码，以及为什么不在 handler 里直接跑 ReAct Agent 而要走确定性 Workflow 进行集中验收。
+H.3 已掌握。下一小节 H.4（Multi-Agent 场景）完成后，围绕第二个 Agent 如何介入现有流程、多 Agent 之间如何传递消息和分工任务，以及这与单 Agent 确定性 Workflow 的本质区别进行集中验收。
 
 ## 10. 历史路线处理
 

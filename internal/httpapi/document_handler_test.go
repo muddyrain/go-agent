@@ -31,6 +31,7 @@ func TestDocumentHandlerRejectsBlankContent(t *testing.T) {
 		NewSessionManager(NewPostgresSessionRepository(db), 20, 30*time.Minute, 5*time.Minute),
 		"127.0.0.1:8080",
 		store,
+		nil, // proposalWorkflow: document tests don't touch /tech-proposal
 	)
 
 	resp := postJSONToEngine(t, h, "/documents", `{"content":"  \n\t "}`)
@@ -67,6 +68,7 @@ func TestDocumentHandlerImportsOverlappingChunks(t *testing.T) {
 		NewSessionManager(NewPostgresSessionRepository(db), 20, 30*time.Minute, 5*time.Minute),
 		"127.0.0.1:8080",
 		store,
+		nil, // proposalWorkflow: document tests don't touch /tech-proposal
 	)
 
 	content := strings.Repeat("甲", 600)

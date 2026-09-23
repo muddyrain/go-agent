@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"agenthub/internal/knowledge"
+	"agenthub/internal/techproposal"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -93,7 +94,8 @@ func NewServer(
 	systemPrompt string,
 	sessionManager *SessionManager,
 	address string,
-	documentStore *knowledge.DocumentStore, // 新增参数
+	documentStore *knowledge.DocumentStore,
+	proposalWorkflow compose.Runnable[techproposal.ProposalRequest, techproposal.ProposalResult],
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
 
@@ -109,6 +111,9 @@ func NewServer(
 
 	// 新增：注册文档导入路由
 	registerDocumentRoutes(h, documentStore)
+
+	// 注册技术方案生成路由
+	registerTechProposalRoutes(h, proposalWorkflow)
 
 	return h
 }
@@ -335,10 +340,11 @@ func Run(
 	ctx context.Context,
 	port int,
 	documentStore *knowledge.DocumentStore,
+	proposalWorkflow compose.Runnable[techproposal.ProposalRequest, techproposal.ProposalResult],
 ) error {
 
 	address = fmt.Sprintf("127.0.0.1:%d", port)
-	h := NewServer(reactAgent, systemPrompt, sessionManager, address, documentStore)
+	h := NewServer(reactAgent, systemPrompt, sessionManager, address, documentStore, proposalWorkflow)
 
 	log.Printf("HTTP server listening on http://%s", address)
 

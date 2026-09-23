@@ -9,6 +9,7 @@ import (
 	"agenthub/internal/mcpclient"
 	"agenthub/internal/mcpserver"
 	"agenthub/internal/projecttool"
+	"agenthub/internal/techproposal"
 	"agenthub/internal/toolcatalog"
 	"context"
 	"fmt"
@@ -98,6 +99,12 @@ func run() error {
 	projectFileTool, err := projecttool.New(projectRoot)
 	if err != nil {
 		return fmt.Errorf("create project file tool: %w", err)
+	}
+
+	// 创建技术方案 Workflow：分析任务 → 收集代码证据 → 模型生成 → 服务端校验
+	proposalWorkflow, err := techproposal.NewAnalysisWorkflow(ctx, projectRoot, chatModel)
+	if err != nil {
+		return fmt.Errorf("create proposal workflow: %w", err)
 	}
 
 	// 教学用 MCP Server 与 CLI 共用当前二进制：Manager 会分别启动
@@ -237,7 +244,7 @@ func run() error {
 	sessionManager.StartCleanup(ctx)
 
 	if len(os.Args) > 1 && os.Args[1] == httpServerMode {
-		return httpapi.Run(reactAgent, systemPrompt, sessionManager, "", ctx, cfg.HTTPPort, documentStore)
+		return httpapi.Run(reactAgent, systemPrompt, sessionManager, "", ctx, cfg.HTTPPort, documentStore, proposalWorkflow)
 	}
 
 	return cli.Run(ctx, reactAgent, toolCatalog, systemPrompt, os.Stdin, os.Stdout)
