@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudwego/eino/components/model"
+	"github.com/cloudwego/eino/schema"
 )
 
 // projectRoot 返回 go test 运行时的项目根（包目录往上两级）。
-// go test 跑包时工作目录固定是 internal/techproposal，因此可用相对路径定位仓库根。
 func projectRoot(t *testing.T) string {
 	t.Helper()
 	root, err := filepath.Abs(filepath.Join("..", ".."))
@@ -19,55 +21,77 @@ func projectRoot(t *testing.T) string {
 	return root
 }
 
-func TestAnalysisWorkflowProducesStructuredRequirements(t *testing.T) {
-	ctx := context.Background()
+// fakeChatModel 是不打网络的测试模型。
+// 它记录收到的 messages，让测试能断言 build_prompt 节点真的把证据拼进去了。
+type fakeChatModel struct {
+	replyContent string
+	lastInput    []*schema.Message
+}
 
-	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t))
+func (m *fakeChatModel) Generate(
+	ctx context.Context,
+	input []*schema.Message,
+	opts ...model.Option,
+) (*schema.Message, error) {
+	m.lastInput = input
+	return schema.AssistantMessage(m.replyContent, nil), nil
+}
+
+func (m *fakeChatModel) Stream(
+	ctx context.Context,
+	input []*schema.Message,
+	opts ...model.Option,
+) (*schema.StreamReader[*schema.Message], error) {
+	// Invoke 路径只走 Generate；Stream 仅为满足接口，用 Pipe 立即发出单条消息。
+	msg, err := m.Generate(ctx, input, opts...)
+	if err != nil {
+		return nil, err
+	}
+	reader, writer := schema.Pipe[*schema.Message](1)
+	writer.Send(msg, nil)
+	writer.Close()
+	return reader, nil
+}
+
+func TestAnalysisWorkflowEndToEnd(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeChatModel{replyContent: "## 技术方案\n（测试回复）"}
+
+	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
 	if err != nil {
 		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
 	}
 
-	const task = "  请设计知识库文档删除与重新导入技术方案  "
-	evidence, err := runnable.Invoke(ctx, ProposalRequest{Task: task})
+	msg, err := runnable.Invoke(ctx, ProposalRequest{Task: "设计知识库文档删除与重新导入技术方案"})
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 
-	// 分析结果现在包裹在 CollectedEvidence.Analysis 里。
-	if evidence.Analysis.OriginalTask != strings.TrimSpace(task) {
-		t.Fatalf("OriginalTask = %q, want %q",
-			evidence.Analysis.OriginalTask, strings.TrimSpace(task))
-	}
-	if evidence.Analysis.Deliverable != "知识库文档删除与重新导入技术方案" {
-		t.Fatalf("Deliverable = %q", evidence.Analysis.Deliverable)
-	}
-	if len(evidence.Analysis.RequiredSections) != 6 {
-		t.Fatalf("RequiredSections length = %d, want 6",
-			len(evidence.Analysis.RequiredSections))
-	}
-	if len(evidence.Analysis.EvidenceRequirements) != 3 {
-		t.Fatalf("EvidenceRequirements length = %d, want 3",
-			len(evidence.Analysis.EvidenceRequirements))
+	// 最终输出是 chat_model 节点吐出的消息内容。
+	if msg.Content != "## 技术方案\n（测试回复）" {
+		t.Fatalf("msg.Content = %q", msg.Content)
 	}
 
-	// 证据节点必须真的读到 6 个项目文件，且每个文件都有路径和内容。
-	if len(evidence.Files) != 6 {
-		t.Fatalf("Files length = %d, want 6", len(evidence.Files))
+	// fake model 应收到 system + user 两条消息。
+	if len(fake.lastInput) != 2 {
+		t.Fatalf("fake received %d messages, want 2", len(fake.lastInput))
 	}
-	for _, f := range evidence.Files {
-		if f.Path == "" {
-			t.Fatal("evidence file has empty path")
-		}
-		if strings.TrimSpace(f.Content) == "" {
-			t.Fatalf("evidence file %q has empty content", f.Path)
-		}
+
+	// user message 必须带上证据文件路径和章节要求，证明 build_prompt 真的拼进去了。
+	userContent := fake.lastInput[1].Content
+	if !strings.Contains(userContent, "internal/knowledge/document.go") {
+		t.Fatalf("user prompt missing evidence path; head: %q", truncate(userContent, 200))
+	}
+	if !strings.Contains(userContent, "必须包含以下章节") {
+		t.Fatal("user prompt missing required sections")
 	}
 }
 
 func TestAnalysisWorkflowRejectsBlankTask(t *testing.T) {
 	ctx := context.Background()
+	fake := &fakeChatModel{replyContent: "不应被调用"}
 
-	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t))
+	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
 	if err != nil {
 		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
 	}
@@ -85,7 +109,8 @@ func TestAnalysisWorkflowPropagatesCanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	runnable, err := NewAnalysisWorkflow(context.Background(), projectRoot(t))
+	fake := &fakeChatModel{replyContent: "不应被调用"}
+	runnable, err := NewAnalysisWorkflow(context.Background(), projectRoot(t), fake)
 	if err != nil {
 		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
 	}
@@ -96,8 +121,7 @@ func TestAnalysisWorkflowPropagatesCanceledContext(t *testing.T) {
 	}
 }
 
-// 以下三个用例直接调用包级 collectEvidence，用 t.TempDir() 隔离文件系统，
-// 不经过 Eino 图，专门固定证据节点本身的失败边界。
+// 以下三个用例直接调用包级 collectEvidence，用 t.TempDir() 隔离文件系统。
 
 func TestCollectEvidenceRejectsEscapingPath(t *testing.T) {
 	dir := t.TempDir()
@@ -129,11 +153,8 @@ func TestCollectEvidenceReportsMissingFile(t *testing.T) {
 
 func TestCollectEvidenceEnforcesSizeLimit(t *testing.T) {
 	dir := t.TempDir()
-	// 写入一个刚超过 128 KiB 的文件。
 	big := make([]byte, maxEvidenceFileSize+1)
-	if err := os.WriteFile(
-		filepath.Join(dir, "big.go"), big, 0o600,
-	); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "big.go"), big, 0o600); err != nil {
 		t.Fatalf("write big fixture: %v", err)
 	}
 
@@ -146,4 +167,11 @@ func TestCollectEvidenceEnforcesSizeLimit(t *testing.T) {
 	if !strings.Contains(err.Error(), "exceeds size limit") {
 		t.Fatalf("err = %q, want size-limit detail", err)
 	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }

@@ -7,12 +7,16 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
 )
 
 const (
 	nodeAnalyzeTask     = "analyze_task"
 	nodeCollectEvidence = "collect_evidence"
+	nodeChatModel       = "chat_model"
+	nodeBuildPrompt     = "build_prompt"
 )
 
 const maxEvidenceFileSize = 128 << 10 // 128 KiB，防止证据节点读入巨型文件
@@ -135,17 +139,59 @@ func collectEvidence(
 	}, nil
 }
 
+// buildPrompt 把分析要求与代码证据组装成模型可直接消费的消息列表。
+func buildPrompt(
+	ctx context.Context,
+	evidence CollectedEvidence,
+) ([]*schema.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("build prompt: %w", err)
+	}
+
+	systemMsg := schema.SystemMessage(
+		"你是一名资深工程师，正在根据已读取的代码证据生成技术方案。" +
+			"必须严格按给定章节组织内容，且每个结论后标注实际依据的文件路径。" +
+			"不得编造代码中不存在的能力。",
+	)
+
+	var sb strings.Builder
+
+	sb.WriteString("请基于以下代码证据，生成")
+	sb.WriteString(evidence.Analysis.Deliverable)
+	sb.WriteString("。\n\n必须包含以下章节：\n")
+	for i, section := range evidence.Analysis.RequiredSections {
+		fmt.Fprintf(&sb, "%d. %s\n", i+1, section)
+	}
+
+	sb.WriteString("\n证据要求：\n")
+	for _, req := range evidence.Analysis.EvidenceRequirements {
+		sb.WriteString("- ")
+		sb.WriteString(req)
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n代码证据：\n")
+	for _, f := range evidence.Files {
+		fmt.Fprintf(&sb, "--- 文件: %s ---\n%s\n", f.Path, f.Content)
+	}
+
+	userMsg := schema.UserMessage(sb.String())
+
+	return []*schema.Message{systemMsg, userMsg}, nil
+}
+
 // NewAnalysisWorkflow 创建"分析任务 → 收集代码证据"的两节点 Workflow。
 func NewAnalysisWorkflow(
 	ctx context.Context,
 	rootDir string,
+	chatModel model.BaseChatModel,
 ) (
-	compose.Runnable[ProposalRequest, CollectedEvidence],
+	compose.Runnable[ProposalRequest, *schema.Message],
 	error,
 ) {
 	workflow := compose.NewWorkflow[
 		ProposalRequest,
-		CollectedEvidence,
+		*schema.Message,
 	]()
 
 	workflow.AddLambdaNode(
@@ -163,7 +209,17 @@ func NewAnalysisWorkflow(
 		compose.InvokableLambda(collect),
 	).AddInput(nodeAnalyzeTask)
 
-	workflow.End().AddInput(nodeCollectEvidence)
+	workflow.AddLambdaNode(
+		nodeBuildPrompt,
+		compose.InvokableLambda(buildPrompt),
+	).AddInput(nodeCollectEvidence)
+
+	workflow.AddChatModelNode(
+		nodeChatModel,
+		chatModel,
+	).AddInput(nodeBuildPrompt)
+
+	workflow.End().AddInput(nodeChatModel)
 
 	runnable, err := workflow.Compile(ctx)
 	if err != nil {

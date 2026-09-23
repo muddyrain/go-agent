@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1 分析节点、H.2.2 代码证据节点已掌握；下一节 H.2.3 方案生成节点 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1 分析节点、H.2.2 代码证据节点、H.2.3 模型生成节点已掌握；下一节 H.2.4 服务端结构化校验 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1 完成 `analyze_task` 分析节点；H.2.2 完成 `collect_evidence` 代码证据节点，Workflow 为 `START → analyze_task → collect_evidence → END`，按分析结果确定性读取 6 个项目文件；下一小节 H.2.3 加入模型方案生成节点。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1 完成 `analyze_task` 分析节点；H.2.2 完成 `collect_evidence` 代码证据节点；H.2.3 完成 `build_prompt` + `chat_model` 模型生成节点，Workflow 为 `START → analyze_task → collect_evidence → build_prompt → chat_model → END`，输出模型生成文本；下一小节 H.2.4 服务端结构化校验。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -485,11 +485,18 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.2.2 Eino 连线：`AddLambdaNode` 读函数签名自动推断输入输出类型；`.AddInput(nodeAnalyzeTask)` 把上一节点输出 `TaskAnalysis` 接到下一节点输入；`End().AddInput(nodeCollectEvidence)` 使流程终点与 `Runnable[ProposalRequest, CollectedEvidence]` 泛型一致；`Compile` 在编译期完成类型与完整性检查，连错线在 Compile 阶段暴露而非运行时
 - H.2.2 测试：6 个用例——端到端 3 个（结构化要求、空任务拒绝、取消传播，均传项目根并断言 Files 恰为 6 个非空文件），包级边界 3 个（路径穿越拒绝、文件不存在时错误带路径、超大文件拒绝）；go test/vet/build/gofmt 全部通过
 - H.2.2 理解验收：能说明证据节点为何接收分析结果、为何由 Workflow 固定读取范围而非让模型无限探索、`rootDir` 为何经闭包注入、`%q` 与 `%w` 分别承担什么、Join 后为何必须 Rel 校验、以及 Compile 在何时做类型检查
-- 下一小节：**H.2.3 方案生成节点：在 `collect_evidence` 后加入模型节点，依据 `CollectedEvidence`（分析要求 + 6 份代码证据）生成带章节与来源引用的技术方案，并在服务端做结构化校验**
+- H.2.3 模型节点：新增 `build_prompt` lambda 节点（`CollectedEvidence → []*schema.Message`）和 `chat_model` 模型节点（`[]*schema.Message → *schema.Message`）；Workflow 变为四节点 `START → analyze_task → collect_evidence → build_prompt → chat_model → END`，最终输出模型生成文本
+- H.2.3 类型桥接：`collect_evidence` 吐自定义结构体 `CollectedEvidence`，而 `AddChatModelNode` 只认 `[]*schema.Message`，类型对不上会在 Compile 报错；`build_prompt` 作为普通函数节点做类型转换，system message 放角色与硬约束，user message 用 `strings.Builder` 拼接交付物、章节清单、证据要求和每份证据的文件路径与内容
+- H.2.3 依赖注入：`NewAnalysisWorkflow` 新增第三个参数 `chatModel model.BaseChatModel`，生产传真实 `*openai.ChatModel`，测试传不打网络的 fake；节点函数不直接 new model，避免网络依赖硬编码进 Workflow
+- H.2.3 AddChatModelNode 与 AddLambdaNode 区别：后者包普通 Go 函数，前者直接接收实现了 `BaseChatModel` 接口的对象（只需 `Generate` 和 `Stream` 两个方法）；Eino 内部知道如何调用 `Generate`，无需 lambda 包装
+- H.2.3 const 块陷阱：`const` 块中一行只写名字不给值会复用上一行表达式，导致 `nodeBuildPrompt` 误用 `"chat_model"` 与真模型节点撞名；必须显式 `= "build_prompt"`
+- H.2.3 测试：fake model 记录收到的 messages，端到端断言最终输出是模型回复内容、fake 收到 system+user 两条、user message 含证据文件路径与章节要求；空任务拒绝、取消传播、三个 collectEvidence 边界用例保持不变；gofmt/vet/build/全项目 test 全过
+- H.2.3 理解验收：能说明为什么需要 build_prompt 中转节点、chatModel 为什么从构造函数注入、AddChatModelNode 和 AddLambdaNode 的区别、const 块省略值的复用规则
+- 下一小节：**H.2.4 服务端结构化校验：把 `chat_model` 输出解析成结构化方案，校验 6 个章节是否齐全、是否引用了证据文件路径，不靠 prompt 约束做确定性保证**
 
 ## 9. 下一节理解验收题
 
-H.2.2 已掌握。下一小节 H.2.3 完成后，围绕模型节点如何接收 `CollectedEvidence`、为什么方案生成不能只靠 prompt 约束而要在服务端做结构化校验、模型输出失败如何归属到节点，以及方案节点与 ReAct Agent 的工具循环有何本质区别进行集中验收。
+H.2.3 已掌握。下一小节 H.2.4 完成后，围绕为什么不能只靠 prompt 约束模型输出、服务端如何校验章节齐全性、模型输出不合规时 Workflow 应如何失败（而不是带病输出方案），以及这与 ReAct Agent 自由生成的本质区别进行集中验收。
 
 ## 10. 历史路线处理
 
