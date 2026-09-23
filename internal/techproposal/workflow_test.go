@@ -55,21 +55,24 @@ func (m *fakeChatModel) Stream(
 
 func TestAnalysisWorkflowEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	fake := &fakeChatModel{replyContent: "## 技术方案\n（测试回复）"}
+	// fake 回复必须包含全部章节关键词，validate_proposal 才会放行。
+	reply := "技术方案：当前数据模型与调用链依据已分析。删除与重新导入 API 已设计。" +
+		"事务一致性有保障。失败处理已覆盖。最小测试方案已写。本次不做的范围已说明。"
+	fake := &fakeChatModel{replyContent: reply}
 
 	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
 	if err != nil {
 		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
 	}
 
-	msg, err := runnable.Invoke(ctx, ProposalRequest{Task: "设计知识库文档删除与重新导入技术方案"})
+	result, err := runnable.Invoke(ctx, ProposalRequest{Task: "设计知识库文档删除与重新导入技术方案"})
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
 
-	// 最终输出是 chat_model 节点吐出的消息内容。
-	if msg.Content != "## 技术方案\n（测试回复）" {
-		t.Fatalf("msg.Content = %q", msg.Content)
+	// 最终输出是校验通过后的 ProposalResult.Content。
+	if result.Content != reply {
+		t.Fatalf("result.Content = %q", result.Content)
 	}
 
 	// fake model 应收到 system + user 两条消息。
@@ -84,6 +87,43 @@ func TestAnalysisWorkflowEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(userContent, "必须包含以下章节") {
 		t.Fatal("user prompt missing required sections")
+	}
+}
+
+func TestValidateProposalRejectsMissingSections(t *testing.T) {
+	ctx := context.Background()
+	// 只写了两章，其余缺失。
+	fake := &fakeChatModel{replyContent: "当前数据模型与调用链依据已分析。删除与重新导入 API 已设计。"}
+
+	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
+	if err != nil {
+		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
+	}
+
+	_, err = runnable.Invoke(ctx, ProposalRequest{Task: "设计技术方案"})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want missing-sections error")
+	}
+	if !strings.Contains(err.Error(), "missing sections") {
+		t.Fatalf("err = %q, want missing-sections detail", err)
+	}
+}
+
+func TestValidateProposalRejectsEmptyContent(t *testing.T) {
+	ctx := context.Background()
+	fake := &fakeChatModel{replyContent: "   "}
+
+	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
+	if err != nil {
+		t.Fatalf("NewAnalysisWorkflow() error = %v", err)
+	}
+
+	_, err = runnable.Invoke(ctx, ProposalRequest{Task: "设计技术方案"})
+	if err == nil {
+		t.Fatal("Invoke() error = nil, want empty-content error")
+	}
+	if !strings.Contains(err.Error(), "proposal content is empty") {
+		t.Fatalf("err = %q, want empty-content detail", err)
 	}
 }
 

@@ -13,13 +13,24 @@ import (
 )
 
 const (
-	nodeAnalyzeTask     = "analyze_task"
-	nodeCollectEvidence = "collect_evidence"
-	nodeChatModel       = "chat_model"
-	nodeBuildPrompt     = "build_prompt"
+	nodeAnalyzeTask      = "analyze_task"
+	nodeCollectEvidence  = "collect_evidence"
+	nodeChatModel        = "chat_model"
+	nodeBuildPrompt      = "build_prompt"
+	nodeValidateProposal = "validate_proposal"
 )
 
 const maxEvidenceFileSize = 128 << 10 // 128 KiB，防止证据节点读入巨型文件
+
+// proposalSections 是技术方案必须包含的章节，analyzeTask 与 validateProposal 共用。
+var proposalSections = []string{
+	"当前数据模型与调用链依据",
+	"删除与重新导入 API",
+	"事务一致性",
+	"失败处理",
+	"最小测试方案",
+	"本次不做的范围",
+}
 
 // EvidenceFile 是一份已读取的代码证据，Path 会在方案里被引用。
 type EvidenceFile struct {
@@ -38,6 +49,11 @@ type CollectedEvidence struct {
 // ProposalRequest 是技术方案 Workflow 的入口数据。
 type ProposalRequest struct {
 	Task string
+}
+
+// ProposalResult 是校验通过后的方案输出。
+type ProposalResult struct {
+	Content string
 }
 
 // TaskAnalysis 是分析节点产生的结构化任务要求。
@@ -69,16 +85,9 @@ func analyzeTask(
 	}
 
 	return TaskAnalysis{
-		OriginalTask: task,
-		Deliverable:  "知识库文档删除与重新导入技术方案",
-		RequiredSections: []string{
-			"当前数据模型与调用链依据",
-			"删除与重新导入 API",
-			"事务一致性",
-			"失败处理",
-			"最小测试方案",
-			"本次不做的范围",
-		},
+		OriginalTask:     task,
+		Deliverable:      "知识库文档删除与重新导入技术方案",
+		RequiredSections: proposalSections,
 		EvidenceRequirements: []string{
 			"必须引用实际读取的项目文件路径",
 			"方案结论必须能够追溯到代码证据",
@@ -180,18 +189,49 @@ func buildPrompt(
 	return []*schema.Message{systemMsg, userMsg}, nil
 }
 
+// validateProposal 检查模型输出是否包含全部必需章节，缺章节则报错。
+func validateProposal(
+	ctx context.Context,
+	msg *schema.Message,
+) (ProposalResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ProposalResult{}, fmt.Errorf("validate proposal: %w", err)
+	}
+
+	content := strings.TrimSpace(msg.Content)
+	if content == "" {
+		return ProposalResult{}, fmt.Errorf("proposal content is empty")
+	}
+
+	var missing []string
+	for _, section := range proposalSections {
+		if !strings.Contains(content, section) {
+			missing = append(missing, section)
+		}
+	}
+
+	if len(missing) > 0 {
+		return ProposalResult{}, fmt.Errorf(
+			"proposal missing sections: %s",
+			strings.Join(missing, ", "),
+		)
+	}
+
+	return ProposalResult{Content: content}, nil
+}
+
 // NewAnalysisWorkflow 创建"分析任务 → 收集代码证据"的两节点 Workflow。
 func NewAnalysisWorkflow(
 	ctx context.Context,
 	rootDir string,
 	chatModel model.BaseChatModel,
 ) (
-	compose.Runnable[ProposalRequest, *schema.Message],
+	compose.Runnable[ProposalRequest, ProposalResult],
 	error,
 ) {
 	workflow := compose.NewWorkflow[
 		ProposalRequest,
-		*schema.Message,
+		ProposalResult,
 	]()
 
 	workflow.AddLambdaNode(
@@ -219,7 +259,12 @@ func NewAnalysisWorkflow(
 		chatModel,
 	).AddInput(nodeBuildPrompt)
 
-	workflow.End().AddInput(nodeChatModel)
+	workflow.AddLambdaNode(
+		nodeValidateProposal,
+		compose.InvokableLambda(validateProposal),
+	).AddInput(nodeChatModel)
+
+	workflow.End().AddInput(nodeValidateProposal)
 
 	runnable, err := workflow.Compile(ctx)
 	if err != nil {
