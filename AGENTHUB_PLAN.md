@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 Workflow 已接到 HTTP 入口（POST /tech-proposal）；下一节 Multi-Agent 场景 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 Workflow 已接到 HTTP 入口；H.4 评审 Agent（第二个模型调用节点）已加入；下一节 Multi-Agent 协作深化 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow；H.3 把 Workflow 接到 HTTP 入口：`POST /tech-proposal` 接收 `{task}`，经 handler 调用 `NewAnalysisWorkflow` 返回 `{result}`；下一节进入 Multi-Agent 场景。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow；H.3 接入 HTTP 入口；H.4 加入评审 Agent：Workflow 链路为 `START → analyze_task → collect_evidence → build_prompt → chat_model → validate_proposal → review_proposal → END`，第二个模型调用节点审查方案质量，输出带评审意见的 ProposalResult。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -503,11 +503,18 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.3 错误映射：请求体非法或 task 为空返回 400；Workflow 内部失败返回 502 并记录日志；成功返回 200 和方案文本
 - H.3 编译错误根因：①`route.Group` 未定义——Hertz 路由组类型是 `*server.Hertz` 不是 `*route.Group`；②`techproposal` 未定义——import 块漏了 `"agenthub/internal/techproposal"`；③`techproposal.Workflow` 类型不存在——实际返回类型是 `compose.Runnable[ProposalRequest, ProposalResult]`；④测试调 NewServer 少传参数——函数签名变更后所有调用点必须同步
 - H.3 理解验收：能说明 Workflow 如何从 internal 包接到 HTTP handler、chatModel 和 rootDir 在入口处如何组装、Workflow 错误如何映射成 HTTP 状态码、为什么不在 handler 里直接跑 ReAct Agent 而要走确定性 Workflow
-- 下一小节：**H.4 Multi-Agent 场景：引入第二个 Agent，让它和现有 Workflow 协作（如评审 Agent 审查生成的技术方案），观察多 Agent 之间的消息传递和任务分工**
+- H.4 评审 Agent：新增 `review_proposal` 节点，输入 `ProposalResult`（validate_proposal 输出），调用第二个模型调用节点审查方案质量，输出带评审意见的 ProposalResult
+- H.4 Multi-Agent 本质：不是新模型，是同一个 chatModel 实例 + 不同提示词——一个负责生成方案，一个负责审查方案。角色由提示词决定，不是由模型实例决定
+- H.4 类型流转：validate_proposal 输出 ProposalResult → review_proposal 接收 ProposalResult；上游输出类型必须等于下游输入类型，Compile 时严格检查
+- H.4 闭包绑定：reviewProposal 需要 chatModel 参数，通过闭包 `review := func(ctx, result) { return reviewProposal(ctx, result, chatModel) }` 绑定到节点
+- H.4 测试修复：fakeChatModel 加 allInputs 字段记录所有调用（不只最后一次），因为 Workflow 现在有两个模型调用节点（chat_model 和 review_proposal）；测试检查 allInputs[0]（第一次调用）验证 build_prompt 拼接正确
+- H.4 编译错误根因：①AddLambdaNode 需要 compose.InvokableLambda() 包装，不能直接传函数；②compose.WithInputs/StreamStart 不存在，用 .AddInput(节点名)；③上游输出类型 ProposalResult 必须等于下游输入类型；④闭包参数类型必须匹配
+- H.4 理解验收：能说明 Multi-Agent 不是多个模型而是多个提示词角色、为什么 fakeChatModel 需要记录所有调用而不只是最后一次、上游输出和下游输入类型为什么必须匹配、闭包绑定和直接传参的区别
+- 下一小节：**H.5 Multi-Agent 深化：评审打回时自动重试（review_proposal 判断打回则回到 chat_model 重新生成），观察循环节点和条件分支在 Eino Workflow 里怎么写**
 
 ## 9. 下一节理解验收题
 
-H.3 已掌握。下一小节 H.4（Multi-Agent 场景）完成后，围绕第二个 Agent 如何介入现有流程、多 Agent 之间如何传递消息和分工任务，以及这与单 Agent 确定性 Workflow 的本质区别进行集中验收。
+H.4 已掌握。下一小节 H.5（Multi-Agent 深化：评审打回自动重试）完成后，围绕 Workflow 里的循环节点怎么写、条件分支怎么判断、打回重试和无限循环的边界在哪进行集中验收。
 
 ## 10. 历史路线处理
 

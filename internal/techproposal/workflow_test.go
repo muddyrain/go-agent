@@ -26,6 +26,7 @@ func projectRoot(t *testing.T) string {
 type fakeChatModel struct {
 	replyContent string
 	lastInput    []*schema.Message
+	allInputs    [][]*schema.Message // 记录所有调用，支持多节点测试
 }
 
 func (m *fakeChatModel) Generate(
@@ -34,6 +35,7 @@ func (m *fakeChatModel) Generate(
 	opts ...model.Option,
 ) (*schema.Message, error) {
 	m.lastInput = input
+	m.allInputs = append(m.allInputs, input)
 	return schema.AssistantMessage(m.replyContent, nil), nil
 }
 
@@ -75,13 +77,13 @@ func TestAnalysisWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("result.Content = %q", result.Content)
 	}
 
-	// fake model 应收到 system + user 两条消息。
-	if len(fake.lastInput) != 2 {
-		t.Fatalf("fake received %d messages, want 2", len(fake.lastInput))
+	// fake model 应收到 system + user 两条消息（第一次调用：build_prompt → chat_model）
+	if len(fake.allInputs[0]) != 2 {
+		t.Fatalf("fake received %d messages, want 2", len(fake.allInputs[0]))
 	}
 
 	// user message 必须带上证据文件路径和章节要求，证明 build_prompt 真的拼进去了。
-	userContent := fake.lastInput[1].Content
+	userContent := fake.allInputs[0][1].Content
 	if !strings.Contains(userContent, "internal/knowledge/document.go") {
 		t.Fatalf("user prompt missing evidence path; head: %q", truncate(userContent, 200))
 	}

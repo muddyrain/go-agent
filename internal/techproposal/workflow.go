@@ -54,6 +54,7 @@ type ProposalRequest struct {
 // ProposalResult 是校验通过后的方案输出。
 type ProposalResult struct {
 	Content string
+	Review  string
 }
 
 // TaskAnalysis 是分析节点产生的结构化任务要求。
@@ -264,7 +265,16 @@ func NewAnalysisWorkflow(
 		compose.InvokableLambda(validateProposal),
 	).AddInput(nodeChatModel)
 
-	workflow.End().AddInput(nodeValidateProposal)
+	review := func(ctx context.Context, result ProposalResult) (ProposalResult, error) {
+		return reviewProposal(ctx, result, chatModel)
+	}
+
+	workflow.AddLambdaNode(
+		"review_proposal",
+		compose.InvokableLambda(review),
+	).AddInput(nodeValidateProposal)
+
+	workflow.End().AddInput("review_proposal")
 
 	runnable, err := workflow.Compile(ctx)
 	if err != nil {
@@ -275,4 +285,32 @@ func NewAnalysisWorkflow(
 	}
 
 	return runnable, nil
+}
+
+// reviewProposal 由第二个 Agent 审查技术方案质量。
+// 输入是 validate_proposal 输出的 ProposalResult，输出带评审意见的 ProposalResult。
+func reviewProposal(ctx context.Context, result ProposalResult, chatModel model.BaseChatModel) (ProposalResult, error) {
+	prompt := fmt.Sprintf(`你是一位资深技术评审专家。请审查以下技术方案，判断它是否：
+1. 章节结构完整、逻辑清晰
+2. 引用了实际代码证据，没有编造
+3. 覆盖了所有必要章节（数据模型、API、事务、失败处理、测试方案、非目标）
+
+方案内容：
+%s
+
+请给出评审结论：通过 / 打回，并说明理由。`, result.Content)
+
+	reviewMsg, err := chatModel.Generate(ctx, []*schema.Message{
+		schema.SystemMessage("你是一位严格的技术评审专家，负责审查技术方案质量。"),
+		schema.UserMessage(prompt),
+	})
+
+	if err != nil {
+		return ProposalResult{}, fmt.Errorf("review proposal: %w", err)
+	}
+
+	return ProposalResult{
+		Content: result.Content,    // 原始方案
+		Review:  reviewMsg.Content, // 评审意见
+	}, nil
 }
