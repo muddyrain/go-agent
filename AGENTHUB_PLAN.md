@@ -174,7 +174,7 @@ usage: input=0 output=0 total=0
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 接入 HTTP 入口；H.4 评审 Agent 已加入；H.5 评审打回报错；H.6 尝试分支（遇 Eino 限制，回退线性流程但保留 Approved 字段）；下一节 Phase I 生产化 |
-| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
+| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 进行中：I.1—I.3 可观测性已完成（Workflow 节点日志 + HTTP 请求日志 + 节点错误日志）；下一节 Docker 化 |
 
 ### 里程碑
 
@@ -237,7 +237,7 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1—H.5 已完成；H.6 尝试 Workflow 分支（AddBranch），遇到 Eino 限制：END 节点只能接收一个节点的输出，两个节点都映射到 END 会报 entire output already mapped；最终回退线性流程，但 ProposalResult 保留 Approved 字段——调用方可以根据 Approved 判断通过/打回。Phase H 主体完成，下一节进入 Phase I 生产化与部署。**
+- 当前路线决策：**Phase H 已完成；Phase I 进行中，I.1—I.3 可观测性已完成：Workflow 节点开始/结束/耗时日志（Eino callbacks OnStartFn/OnEndFn/OnErrorFn）+ HTTP 请求日志中间件（方法/路径/状态码/耗时）；下一节 Docker 化。**
 - 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5、H.6**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)

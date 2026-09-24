@@ -3,10 +3,13 @@ package techproposal
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
@@ -18,6 +21,7 @@ const (
 	nodeChatModel        = "chat_model"
 	nodeBuildPrompt      = "build_prompt"
 	nodeValidateProposal = "validate_proposal"
+	nodeReviewProposal   = "review_proposal"
 )
 
 const maxEvidenceFileSize = 128 << 10 // 128 KiB，防止证据节点读入巨型文件
@@ -266,6 +270,44 @@ func rejectionHandler(ctx context.Context, result ProposalResult) (ProposalResul
 	}, nil
 }
 
+// NewWorkflowCallback 创建 Workflow 节点回调，记录每个节点的开始、结束和耗时。
+func NewWorkflowCallback() callbacks.Handler {
+	return callbacks.NewHandlerBuilder().
+		OnStartFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackInput,
+		) context.Context {
+			// 用 context 存开始时间，结束时取出来算耗时
+			return context.WithValue(ctx, startTimeKey(info.Name), time.Now())
+		}).
+		OnEndFn(func(
+			ctx context.Context,
+			info *callbacks.RunInfo,
+			_ callbacks.CallbackOutput,
+		) context.Context {
+			start, ok := ctx.Value(startTimeKey(info.Name)).(time.Time)
+			if !ok {
+				log.Printf("workflow node end: %s (start time not found)", info.Name)
+				return ctx
+			}
+			log.Printf("workflow node end: %s, elapsed=%s", info.Name, time.Since(start))
+			return ctx
+		}).
+		OnErrorFn(func(ctx context.Context, info *callbacks.RunInfo, err error) context.Context {
+			log.Printf("workflow node error: %s, error=%v", info.Name, err)
+			return ctx
+		}).
+		Build()
+}
+
+// startTimeKey 是 context 里存节点开始时间的 key 类型。
+type startTimeKeyType string
+
+func startTimeKey(nodeName string) startTimeKeyType {
+	return startTimeKeyType("start:" + nodeName)
+}
+
 // NewAnalysisWorkflow 创建"分析任务 → 收集代码证据"的两节点 Workflow。
 func NewAnalysisWorkflow(
 	ctx context.Context,
@@ -315,11 +357,11 @@ func NewAnalysisWorkflow(
 	}
 
 	workflow.AddLambdaNode(
-		"review_proposal",
+		nodeReviewProposal,
 		compose.InvokableLambda(review),
 	).AddInput(nodeValidateProposal)
 
-	workflow.End().AddInput("review_proposal")
+	workflow.End().AddInput(nodeReviewProposal)
 
 	runnable, err := workflow.Compile(ctx)
 	if err != nil {

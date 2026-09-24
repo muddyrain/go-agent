@@ -46,7 +46,9 @@ func techProposalHandler(
 		return
 	}
 
-	result, err := workflow.Invoke(ctx, techproposal.ProposalRequest{Task: req.Task})
+	result, err := workflow.Invoke(ctx, techproposal.ProposalRequest{Task: req.Task},
+		compose.WithCallbacks(techproposal.NewWorkflowCallback()),
+	)
 	if err != nil {
 		log.Printf("tech proposal workflow failed: %v", err)
 		c.JSON(502, errorResponse{Error: "workflow execution failed"})

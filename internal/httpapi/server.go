@@ -11,6 +11,7 @@ import (
 	"io"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino/callbacks"
 	"github.com/cloudwego/eino/components"
@@ -86,6 +87,22 @@ type generator interface {
 	) (*schema.StreamReader[*schema.Message], error)
 }
 
+// requestLogger 是 HTTP 请求日志中间件：记录每个请求的方法、路径、状态码和耗时。
+func requestLogger() app.HandlerFunc {
+	return func(ctx context.Context, c *app.RequestContext) {
+		start := time.Now()
+		path := string(c.Request.URI().Path())
+		method := string(c.Request.Method())
+
+		// 先执行后面的 handler（业务逻辑）
+		c.Next(ctx)
+
+		// handler 执行完后，记录日志
+		log.Printf("http %s %s %d elapsed=%s",
+			method, path, c.Response.StatusCode(), time.Since(start))
+	}
+}
+
 // NewServer 创建并配置 Hertz 实例，注册 /chat 和 /chat/stream 两个路由。
 // 分离 NewServer 和 Run 是为了测试时可以直接拿到 *server.Hertz 发请求，
 // 不需要真正监听端口。
@@ -98,6 +115,9 @@ func NewServer(
 	proposalWorkflow compose.Runnable[techproposal.ProposalRequest, techproposal.ProposalResult],
 ) *server.Hertz {
 	h := server.Default(server.WithHostPorts(address))
+
+	// 注册请求日志中间件：所有请求都会先经过这里
+	h.Use(requestLogger())
 
 	h.GET("/", indexHandler)
 
