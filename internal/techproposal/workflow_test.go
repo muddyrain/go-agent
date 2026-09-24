@@ -75,6 +75,7 @@ func TestAnalysisWorkflowEndToEnd(t *testing.T) {
 	}
 
 	// 最终输出是校验通过后的 ProposalResult.Content。
+	t.Logf("result = %+v", result)
 	if result.Content != reply {
 		t.Fatalf("result.Content = %q", result.Content)
 	}
