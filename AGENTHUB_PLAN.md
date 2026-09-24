@@ -173,7 +173,7 @@ usage: input=0 output=0 total=0
 | Phase E：HTTP 与 Web Playground | CLI 无法被其他应用调用，产品形态不可见 | HTTP/SSE API 和最小聊天控制台 | AgentHub 应用层调用 Eino | 已完成：E.1—E.7 已掌握 |
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
-| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 Workflow 已接到 HTTP 入口；H.4 评审 Agent（第二个模型调用节点）已加入；下一节 Multi-Agent 协作深化 |
+| Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 接入 HTTP 入口；H.4 评审 Agent 已加入；H.5 评审打回报错（不做自动重试）；下一节 Workflow 分支与循环 |
 | Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 待开始 |
 
 ### 里程碑
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow；H.3 接入 HTTP 入口；H.4 加入评审 Agent：Workflow 链路为 `START → analyze_task → collect_evidence → build_prompt → chat_model → validate_proposal → review_proposal → END`，第二个模型调用节点审查方案质量，输出带评审意见的 ProposalResult。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4**
+- 当前路线决策：**H.1 已建立单 Agent 失败基线；H.2.1—H.2.4 完成确定性 Workflow；H.3 接入 HTTP 入口；H.4 加入评审 Agent；H.5 评审打回报错：review_proposal 判断评审文本不含"通过"则返回 error，Workflow 失败，HTTP 返回 502；不做自动重试（循环节点留到后续）。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -510,11 +510,15 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.4 测试修复：fakeChatModel 加 allInputs 字段记录所有调用（不只最后一次），因为 Workflow 现在有两个模型调用节点（chat_model 和 review_proposal）；测试检查 allInputs[0]（第一次调用）验证 build_prompt 拼接正确
 - H.4 编译错误根因：①AddLambdaNode 需要 compose.InvokableLambda() 包装，不能直接传函数；②compose.WithInputs/StreamStart 不存在，用 .AddInput(节点名)；③上游输出类型 ProposalResult 必须等于下游输入类型；④闭包参数类型必须匹配
 - H.4 理解验收：能说明 Multi-Agent 不是多个模型而是多个提示词角色、为什么 fakeChatModel 需要记录所有调用而不只是最后一次、上游输出和下游输入类型为什么必须匹配、闭包绑定和直接传参的区别
-- 下一小节：**H.5 Multi-Agent 深化：评审打回时自动重试（review_proposal 判断打回则回到 chat_model 重新生成），观察循环节点和条件分支在 Eino Workflow 里怎么写**
+- H.5 评审打回报错：reviewProposal 拿到评审文本后，用 strings.Contains 判断是否包含"通过"；不包含则返回 error（"review rejected: ..."），Workflow 失败，HTTP 返回 502
+- H.5 简化原因：自动重试（循环节点）在 Eino Workflow 里涉及 AddBranch、条件判断和回到上游节点，API 复杂且容易出问题（无限循环、类型不匹配）；先做最简单的"打回报错"版本，循环留到后续再做
+- H.5 测试修复：fakeChatModel 的回复内容需要同时满足两个条件——包含所有章节关键词（通过 validate_proposal）+ 包含"通过"（通过 review_proposal）；因为 fake 对所有调用返回同一个内容
+- H.5 理解验收：能说明为什么评审打回报错比自动重试更简单、strings.Contains 做关键词判断的局限性、fakeChatModel 为什么需要同时满足两个节点的断言条件
+- 下一小节：**H.6 Workflow 分支与循环：用 AddBranch 实现评审打回自动重试——review_proposal 判断打回则回到 chat_model 重新生成，观察条件分支和循环节点在 Eino 里怎么写**
 
 ## 9. 下一节理解验收题
 
-H.4 已掌握。下一小节 H.5（Multi-Agent 深化：评审打回自动重试）完成后，围绕 Workflow 里的循环节点怎么写、条件分支怎么判断、打回重试和无限循环的边界在哪进行集中验收。
+H.5 已掌握。下一小节 H.6（Workflow 分支与循环：评审打回自动重试）完成后，围绕 AddBranch 怎么用、条件分支怎么判断、打回重试和无限循环的边界在哪进行集中验收。
 
 ## 10. 历史路线处理
 

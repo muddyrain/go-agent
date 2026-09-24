@@ -309,6 +309,13 @@ func reviewProposal(ctx context.Context, result ProposalResult, chatModel model.
 		return ProposalResult{}, fmt.Errorf("review proposal: %w", err)
 	}
 
+	// 判断评审结果：包含"通过"则放行，否则打回报错
+	if !strings.Contains(reviewMsg.Content, "通过") {
+		return ProposalResult{}, fmt.Errorf(
+			"review rejected: %s", reviewMsg.Content,
+		)
+	}
+
 	return ProposalResult{
 		Content: result.Content,    // 原始方案
 		Review:  reviewMsg.Content, // 评审意见

@@ -57,9 +57,11 @@ func (m *fakeChatModel) Stream(
 
 func TestAnalysisWorkflowEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	// fake 回复必须包含全部章节关键词，validate_proposal 才会放行。
+	// fake 回复必须包含全部章节关键词，validate_proposal 才会放行；
+	// 同时包含"通过"，review_proposal 才会放行。
 	reply := "技术方案：当前数据模型与调用链依据已分析。删除与重新导入 API 已设计。" +
-		"事务一致性有保障。失败处理已覆盖。最小测试方案已写。本次不做的范围已说明。"
+		"事务一致性有保障。失败处理已覆盖。最小测试方案已写。本次不做的范围已说明。" +
+		"评审结论：通过。"
 	fake := &fakeChatModel{replyContent: reply}
 
 	runnable, err := NewAnalysisWorkflow(ctx, projectRoot(t), fake)
