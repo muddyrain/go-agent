@@ -8,6 +8,7 @@ import (
 	"agenthub/internal/knowledge"
 	"agenthub/internal/mcpclient"
 	"agenthub/internal/mcpserver"
+	"agenthub/internal/obs"
 	"agenthub/internal/projecttool"
 	"agenthub/internal/techproposal"
 	"agenthub/internal/toolcatalog"
@@ -64,6 +65,9 @@ func main() {
 }
 
 func run() error {
+
+	logger := obs.New()
+
 	// run 是应用组装入口：创建模型、工具与 Agent，再根据启动参数选择
 	// HTTP 或 CLI 入口。Eino ReAct Agent 只负责 Model → Tool → Model 的
 	// 执行闭环，不承担 HTTP 协议、终端交互或会话存储职责。
@@ -77,7 +81,11 @@ func run() error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("invalid configuration: %w", err)
 	}
-	log.Printf("configuration loaded: env=%s, http_port=%d, db=%s", cfg.Env, cfg.HTTPPort, cfg.DatabaseURL)
+	logger.Info("configuration loaded",
+		obs.String("env", cfg.Env),
+		obs.Int("http_port", cfg.HTTPPort),
+		obs.String("db", cfg.DatabaseURL),
+	)
 
 	ctx := context.Background()
 	// signal.NotifyContext 监听 SIGINT（Ctrl+C）和 SIGTERM（kill 默认），
@@ -145,7 +153,7 @@ func run() error {
 		// run 无论从正常退出还是错误路径返回，都要统一释放全部 MCP
 		// Session。Manager 负责倒序关闭，入口只负责记录清理错误。
 		if err := mcpManager.Close(); err != nil {
-			log.Printf("close MCP servers: %v", err)
+			logger.Error("close MCP servers", obs.String("error", err.Error()))
 		}
 	}()
 

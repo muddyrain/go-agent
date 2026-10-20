@@ -174,7 +174,7 @@ usage: input=0 output=0 total=0
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 接入 HTTP 入口；H.4 评审 Agent 已加入；H.5 评审打回报错；H.6 尝试分支（遇 Eino 限制，回退线性流程但保留 Approved 字段）；下一节 Phase I 生产化 |
-| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 进行中：I.1—I.4 已完成（可观测性 + Docker 镜像）；下一节 日志/指标/告警 |
+| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 进行中：I.1—I.5 已完成（可观测性 + Docker 镜像 + 结构化日志）；下一节 Prometheus 指标暴露 |
 
 ### 里程碑
 
@@ -237,8 +237,8 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 ## 8. 当前学习位置
 
 - 当前阶段：**Phase I：生产化与部署**
-- 当前路线决策：**Phase I 进行中，I.1—I.4 已完成：可观测性（Workflow 节点日志 + HTTP 请求日志 + 节点错误日志）+ Docker 多阶段镜像（非 root 用户、生产环境默认配置、serve 模式启动）；下一节 日志/指标/告警。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5、H.6、I.1、I.2、I.3、I.4**
+- 当前路线决策：**Phase I 进行中，I.1—I.5 已完成：可观测性（Workflow 节点日志 + HTTP 请求日志 + 节点错误日志）+ Docker 多阶段镜像 + 结构化 JSON 日志器；下一节 Prometheus 指标暴露。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5、H.6、I.1、I.2、I.3、I.4、I.5**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -519,11 +519,17 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - I.4 运行配置：ENV AGENTHUB_ENV=production 默认生产环境；CMD ["./agenthub", "serve"] 启动 HTTP 服务而非 CLI；host.docker.internal 连接宿主机 PostgreSQL
 - I.4 验证：go build ./... 和 go vet ./... 全部通过；Docker 实际 build/run 待安装 Docker Desktop 后验证
 - I.4 理解验收：能说明多阶段构建的价值（镜像小、攻击面小）、为什么用 exec 格式 CMD（信号传递正确）、为什么容器内用 host.docker.internal 而不是 localhost、为什么生产环境用非 root 用户运行
-- 下一小节：**I.5 日志、指标与告警：结构化日志、Prometheus 指标暴露、关键路径告警——从"能看日志"到"能监控和告警"**
+- I.5 结构化日志器：新增 `internal/obs` 包，最小 Logger 支持 Info/Error 级别，输出标准 JSON（level/ts/msg + 自定义字段）
+- I.5 Field 模式：用 `Field{Key, Value}` 结构体 + `String()`/`Int()` 辅助函数表示结构化字段，替代硬编码格式字符串；map 动态展开支持任意字段组合
+- I.5 降级原则：JSON 序列化失败时降级为 stderr 纯文本输出，日志系统本身不能成为故障点
+- I.5 接入 main.go：创建 Logger 实例，替换配置加载日志和 MCP 关闭错误日志；后续逐步替换 httpapi 等其他包的 log.Printf
+- I.5 验证：go build ./... 通过，internal/obs 包 2 个测试全部通过；全项目测试中 knowledge/httpapi 失败为测试数据库脏数据问题，与本节改动无关
+- I.5 理解验收：能说明结构化日志 vs 纯文本日志的适用场景（小工具用 log.Printf 够用，要部署的服务需要结构化日志）、为什么用 Field 模式而不是直接 map、为什么 Logger 要用结构体而不是包级函数、日志为什么要降级不能 panic
+- 下一小节：**I.6 Prometheus 指标暴露：/metrics 端点 + HTTP 请求计数器/直方图——从"能看日志"到"能看运行指标"**
 
 ## 9. 下一节理解验收题
 
-I.4 已掌握。下一小节 I.5（日志、指标与告警）完成后，围绕结构化日志格式、Prometheus 指标暴露方式、关键路径指标选择和告警阈值设计进行集中验收。
+I.5 已掌握。下一小节 I.6（Prometheus 指标暴露）完成后，围绕 Counter vs Gauge vs Histogram 的区别、/metrics 端点怎么实现、HTTP 请求指标怎么埋点、标签 cardinality 问题进行集中验收。
 
 ## 10. 历史路线处理
 
