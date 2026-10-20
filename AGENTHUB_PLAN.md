@@ -174,7 +174,7 @@ usage: input=0 output=0 total=0
 | Phase F：会话与配置持久化 | 重启后 Agent 和会话丢失 | Agent CRUD、历史会话恢复 | PostgreSQL + Repository | 已完成：F.1—F.5 全部掌握，下一节 Phase G.1 知识库与 RAG 基础 |
 | Phase G：知识库与 RAG | Agent 不能可靠回答私有文档问题 | 文档上传、检索和带引用回答 | Eino Retriever + pgvector | 已完成：G.1—G.5 已掌握；下一节 Phase H.1 选择首个可观察的 Workflow 编排场景 |
 | Phase H：Workflow 与 Multi-Agent | 复杂任务需要可控分工和恢复 | 一个有基线对照的编排场景 | Eino Graph/Workflow/Agent | 进行中：H.1 单 Agent 基线已完成；H.2.1—H.2.4 确定性 Workflow 已掌握；H.3 接入 HTTP 入口；H.4 评审 Agent 已加入；H.5 评审打回报错；H.6 尝试分支（遇 Eino 限制，回退线性流程但保留 Approved 字段）；下一节 Phase I 生产化 |
-| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 进行中：I.1—I.3 可观测性已完成（Workflow 节点日志 + HTTP 请求日志 + 节点错误日志）；下一节 Docker 化 |
+| Phase I：生产化与部署 | 本机可跑但不可维护、诊断和交付 | Trace、指标、评测、安全、Docker 和 V1 演示 | 生产保障层 | 进行中：I.1—I.4 已完成（可观测性 + Docker 镜像）；下一节 日志/指标/告警 |
 
 ### 里程碑
 
@@ -236,9 +236,9 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 
 ## 8. 当前学习位置
 
-- 当前阶段：**Phase H：Workflow 与 Multi-Agent**
-- 当前路线决策：**Phase H 已完成；Phase I 进行中，I.1—I.3 可观测性已完成：Workflow 节点开始/结束/耗时日志（Eino callbacks OnStartFn/OnEndFn/OnErrorFn）+ HTTP 请求日志中间件（方法/路径/状态码/耗时）；下一节 Docker 化。**
-- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5、H.6**
+- 当前阶段：**Phase I：生产化与部署**
+- 当前路线决策：**Phase I 进行中，I.1—I.4 已完成：可观测性（Workflow 节点日志 + HTTP 请求日志 + 节点错误日志）+ Docker 多阶段镜像（非 root 用户、生产环境默认配置、serve 模式启动）；下一节 日志/指标/告警。**
+- 已掌握：**A.1—A.4、B.1—B.5、C.1—C.5、D.1—D.3、E.1—E.7、F.1—F.5、G.1—G.5、H.1、H.2.1、H.2.2、H.2.3、H.2.4、H.3、H.4、H.5、H.6、I.1、I.2、I.3、I.4**
 - A.1 可见结果：`go run ./examples/selfbuilt-runtime` 输出启动信息、固定 Assistant 回答、`steps: 1` 和零值 Usage
 - A.1 调用链：[`docs/images/a1-direct-answer-flow.svg`](docs/images/a1-direct-answer-flow.svg)
 - A.1 理解验收：能解释隐式接口实现与编译期检查的区别、Factory 创建 Memory 的职责、空 Registry 不妨碍直接回答，以及 `Steps` 表示模型调用次数
@@ -514,11 +514,16 @@ B.4 新增 [`docs/decisions/0001-use-eino-for-production-runtime.md`](docs/decis
 - H.5 简化原因：自动重试（循环节点）在 Eino Workflow 里涉及 AddBranch、条件判断和回到上游节点，API 复杂且容易出问题（无限循环、类型不匹配）；先做最简单的"打回报错"版本，循环留到后续再做
 - H.5 测试修复：fakeChatModel 的回复内容需要同时满足两个条件——包含所有章节关键词（通过 validate_proposal）+ 包含"通过"（通过 review_proposal）；因为 fake 对所有调用返回同一个内容
 - H.5 理解验收：能说明为什么评审打回报错比自动重试更简单、strings.Contains 做关键词判断的局限性、fakeChatModel 为什么需要同时满足两个节点的断言条件
-- 下一小节：**H.6 Workflow 分支与循环：用 AddBranch 实现评审打回自动重试——review_proposal 判断打回则回到 chat_model 重新生成，观察条件分支和循环节点在 Eino 里怎么写**
+- I.4 Docker 镜像：多阶段构建（golang:1.23-alpine 编译 + alpine:latest 运行），最终镜像只包含二进制、configs 目录和非 root 用户配置
+- I.4 安全边界：创建 appgroup/appuser 系统用户，USER appuser 切换，避免容器内以 root 运行；敏感信息（API Key、数据库密码）通过运行时环境变量注入，不写入镜像
+- I.4 运行配置：ENV AGENTHUB_ENV=production 默认生产环境；CMD ["./agenthub", "serve"] 启动 HTTP 服务而非 CLI；host.docker.internal 连接宿主机 PostgreSQL
+- I.4 验证：go build ./... 和 go vet ./... 全部通过；Docker 实际 build/run 待安装 Docker Desktop 后验证
+- I.4 理解验收：能说明多阶段构建的价值（镜像小、攻击面小）、为什么用 exec 格式 CMD（信号传递正确）、为什么容器内用 host.docker.internal 而不是 localhost、为什么生产环境用非 root 用户运行
+- 下一小节：**I.5 日志、指标与告警：结构化日志、Prometheus 指标暴露、关键路径告警——从"能看日志"到"能监控和告警"**
 
 ## 9. 下一节理解验收题
 
-H.5 已掌握。下一小节 H.6（Workflow 分支与循环：评审打回自动重试）完成后，围绕 AddBranch 怎么用、条件分支怎么判断、打回重试和无限循环的边界在哪进行集中验收。
+I.4 已掌握。下一小节 I.5（日志、指标与告警）完成后，围绕结构化日志格式、Prometheus 指标暴露方式、关键路径指标选择和告警阈值设计进行集中验收。
 
 ## 10. 历史路线处理
 
