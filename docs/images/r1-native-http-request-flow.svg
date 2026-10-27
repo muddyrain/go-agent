@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="263" viewBox="0 0 960 350" role="img" aria-labelledby="title desc">
+  <title id="title">R.1 原生 HTTP 请求调用链（教学目标示意）</title>
+  <desc id="desc">客户端通过本地端口发请求，net/http 解析为 Request，ServeMux 按方法与路径分发到 pingHandler 或 echoHandler，Handler 通过 ResponseWriter 构造响应。未匹配的路径或方法由 ServeMux 返回错误。当前是教学目标，核心代码尚待学习者编写。</desc>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#53768b"/></marker></defs>
+  <rect width="960" height="350" fill="#f8fafc" rx="12"/>
+  <g font-family="PingFang SC, Microsoft YaHei, sans-serif" fill="#203747">
+    <text x="26" y="35" font-size="21" font-weight="600">R.1 原生 HTTP 请求调用链</text>
+    <text x="26" y="61" font-size="14" fill="#576b7b">教学目标示意 · 独立练习 · 不经过 Hertz、模型或数据库</text>
+    <g stroke="#53768b" fill="none" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M 151 141 H 184"/><path d="M 366 141 H 399"/>
+      <path d="M 569 141 H 587 V 112 H 604"/><path d="M 569 141 H 587 V 181 H 604"/>
+      <path d="M 773 112 H 790 V 141 H 807"/><path d="M 773 181 H 790 V 141 H 807"/>
+      <path d="M 875 208 V 305 H 85 V 185"/>
+      <path d="M 483 186 V 229"/>
+    </g>
+    <rect x="26" y="95" width="125" height="90" rx="9" fill="#e3eef8" stroke="#8fb0cc"/>
+    <text x="88" y="125" text-anchor="middle" font-size="18">客户端</text><text x="88" y="155" text-anchor="middle" font-size="15">curl / 浏览器</text>
+    <rect x="184" y="95" width="182" height="90" rx="9" fill="#e3eef8" stroke="#8fb0cc"/>
+    <text x="275" y="123" text-anchor="middle" font-size="18">net/http Server</text><text x="275" y="151" text-anchor="middle" font-size="14">监听 → 解析 Request</text><text x="275" y="173" text-anchor="middle" font-size="13">127.0.0.1:8090</text>
+    <rect x="399" y="95" width="170" height="90" rx="9" fill="#e5f3ed" stroke="#8fb5a1"/>
+    <text x="484" y="124" text-anchor="middle" font-size="18">ServeMux</text><text x="484" y="155" text-anchor="middle" font-size="14">按方法 + 路径分发</text>
+    <rect x="604" y="84" width="169" height="57" rx="8" fill="#e5f3ed" stroke="#8fb5a1"/>
+    <text x="688" y="105" text-anchor="middle" font-size="14">GET /ping</text><text x="688" y="128" text-anchor="middle" font-size="16">pingHandler</text>
+    <rect x="604" y="152" width="169" height="57" rx="8" fill="#e5f3ed" stroke="#8fb5a1"/>
+    <text x="688" y="173" text-anchor="middle" font-size="14">POST /echo</text><text x="688" y="197" text-anchor="middle" font-size="16">echoHandler</text>
+    <rect x="807" y="95" width="128" height="113" rx="9" fill="#fff4de" stroke="#c8b17c"/>
+    <text x="871" y="122" text-anchor="middle" font-size="15">ResponseWriter</text><text x="871" y="149" text-anchor="middle" font-size="14">响应头</text><text x="871" y="170" text-anchor="middle" font-size="14">状态码</text><text x="871" y="191" text-anchor="middle" font-size="14">正文</text>
+    <rect x="350" y="231" width="270" height="44" rx="8" fill="#f2f4f6" stroke="#a8b1bc"/>
+    <text x="485" y="258" text-anchor="middle" font-size="14">未匹配：路径 404 / 方法 405</text>
+    <text x="687" y="297" text-anchor="middle" font-size="14" fill="#53768b">响应返回客户端；Handler 不负责监听端口</text>
+    <text x="26" y="333" font-size="13" fill="#576b7b">GET 路由也匹配 HEAD；echo 先完整读取限量请求体，再开始写成功响应。</text>
+  </g>
+</svg>

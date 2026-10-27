@@ -1,6 +1,6 @@
 # AgentHub 学习示例
 
-`examples/` 保存课程中用于理解 Agent 原理和对照 Eino 行为的可运行示例。它们不是 AgentHub 的生产入口，也不应继续承载新的产品功能。
+`examples/` 保存用于理解 Go/HTTP 基础、Agent 原理和对照 Eino 行为的教学示例。它们不是 AgentHub 的生产入口，也不应继续承载新的产品功能。
 
 正式入口是 [`cmd/agenthub`](../cmd/agenthub)。后续真实模型、交互式 CLI、HTTP/SSE、持久化、RAG 等生产能力从该入口及其应用代码演进。
 
@@ -11,6 +11,7 @@
 | `selfbuilt-runtime` | Phase A | 观察自研 Message、Model、Registry、Executor、Memory 和 Agent Loop 如何组成工具调用闭环 | `go run ./examples/selfbuilt-runtime` |
 | `eino-direct` | B.1 | 观察 Eino Chain、Compile、Runnable 和 ChatModel 的最小直接回答 | `go run ./examples/eino-direct` |
 | `eino-tool` | B.2 | 观察 Eino Tool、ToolsNode 和 ReAct Agent 的同步工具调用闭环 | `go run ./examples/eino-tool` |
+| `http-from-scratch` | 二轮 R.1—R.6 | 标准库 HTTP 独立教学练习，保留原 AgentHub 实现作后续对照；R.1 `/ping`、`/echo` 与查询参数 `/hello` 已实现并验收 | `go run ./examples/http-from-scratch` |
 
 ## 维护边界
 

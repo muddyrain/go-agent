@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="245" viewBox="0 0 720 245" role="img" aria-labelledby="title desc">
+<title id="title">R.1：curl 发送请求体，echoHandler 写回响应体</title>
+<desc id="desc">请求和响应是两个方向。curl 的 data-binary 参数把你好，Go HTTP 发送为请求体。echoHandler 用 io.ReadAll 读取到 body，再用 w.Write 将 body 写回响应体。curl 默认显示收到的响应体，并不是参数本身直接打印文字。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 Z" fill="#3b738a"/></marker></defs>
+<rect width="720" height="245" rx="12" fill="#f8fafc"/>
+<g font-family="PingFang SC,Microsoft YaHei,sans-serif" fill="#203747">
+<text x="24" y="32" font-size="19" font-weight="600">同一句文字走了两个方向：请求 → 响应</text>
+<text x="24" y="56" font-size="13" fill="#5b6f7b">R.1 当前代码示意 · 参数负责发送，Handler 决定返回什么</text>
+<rect x="24" y="82" width="178" height="122" rx="9" fill="#e3eef8" stroke="#91adc3"/>
+<text x="113" y="111" font-size="17" text-anchor="middle">curl 客户端</text>
+<text x="113" y="137" font-size="14" text-anchor="middle">--data-binary 发送正文</text>
+<text x="113" y="181" font-size="14" text-anchor="middle">终端显示收到的响应</text>
+<rect x="448" y="82" width="248" height="122" rx="9" fill="#e5f3ed" stroke="#91b7a3"/>
+<text x="572" y="110" font-size="17" text-anchor="middle">Go：echoHandler</text>
+<text x="572" y="138" font-size="14" text-anchor="middle">io.ReadAll(r.Body) → body</text>
+<text x="572" y="181" font-size="14" text-anchor="middle">w.Write(body) → 响应体</text>
+<g stroke="#3b738a" stroke-width="2" fill="none" marker-end="url(#arrow)"><path d="M202 123 H448"/><path d="M448 175 H202"/></g>
+<text x="325" y="105" text-anchor="middle" font-size="14">请求体：你好，Go HTTP</text>
+<text x="325" y="159" text-anchor="middle" font-size="14">响应体：你好，Go HTTP</text>
+<text x="24" y="231" font-size="14" fill="#5b6f7b">如果 Handler 改为写回其他文字，curl 显示的也会变成其他文字。</text>
+</g>
+</svg>
