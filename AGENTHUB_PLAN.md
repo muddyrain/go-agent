@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1**
-- 下一小节：**R.3.2 异常恢复中间件——先观察 panic 请求行为，再建立请求级恢复边界。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）**
+- 下一小节：**R.4 Context 与取消——请求取消后，服务端如何协作停止正在进行的工作。**
 
 ### R.1 最小 HTTP 服务
 
@@ -137,7 +137,7 @@
 
 #### R.3.1 请求日志中间件
 
-- 状态：已掌握；loggingMiddleware 与入口接线已实现，调用范围与执行顺序已确认；本课测试、定向竞态检查、静态检查和构建通过。R.3 整体仍待 R.3.2 异常恢复完成。
+- 状态：已掌握；loggingMiddleware 与入口接线已实现，调用范围与执行顺序已确认；本课测试、定向竞态检查、静态检查和构建通过。R.3.2 已在当前普通 HTTP 教学范围完成，流式等边界仍按后续阶段处理。
 - 用户可见目标：每个请求结束时统一记录方法、路径和 Handler 调用耗时，成功请求、400 等请求错误及 ServeMux 返回的 404/405 均可见；旧响应保持不变。
 - 核心代码：新建 `examples/http-from-scratch/middleware.go`，实现 `loggingMiddleware(next http.Handler) http.Handler`；`main.go` 把 `loggingMiddleware(mux)` 传入 `ListenAndServe`。
 - 封装必要性：已有四个路由，逐 Handler 添加相同请求日志会重复并漏掉未匹配路由；在 ServeMux 外包装一次覆盖统一请求边界。
@@ -151,3 +151,19 @@
 - 独立迁移验收：已确认仅对 `/greet` 加日志应包装该 Handler，而非整个 mux；当前仍保留全局日志，未改动运行范围。本阶段采用解释变体验收，不额外新增接口。
 - Git 检查点：提交主题 `feat(http): 添加统一请求日志中间件`；仅包含本阶段中间件、测试、入口接线、计划、示例说明与学习图；不 push，实际提交哈希以 Git 历史为准。
 - 下一阶段：R.3.2 异常恢复中间件，先观察 panic 请求行为，再决定恢复边界。
+
+#### R.3.2 异常恢复中间件
+
+- 状态：已掌握（当前普通非流式 HTTP 教学范围）；核心实现与入口接线完成，关键分支已集中讲解，恢复边界测试和真实入口验证通过。
+- 基线证据：`recovery_baseline_test.go` 在随机端口启动只有日志包装的 Handler；响应前 panic 导致客户端 EOF，已 Flush 部分响应后 panic 导致 HTTP 200 加残缺正文/ unexpected EOF；两种情况下后续 `/ping` 均成功，证明标准库已经隔离请求 panic，但不会自动生成完整 500。
+- 用户可见目标：新增 `recoveryMiddleware`，普通请求行为不变；当前请求在写出前 panic 时返回通用 500 并记录堆栈，写出后 panic 则中断而不追加错误正文；日志包在 recovery 外，记录恢复流程总耗时。
+- 核心代码：在同目录新建 `recovery.go`；用小型 `recoveryWriter` 包装 ResponseWriter，记录当前请求是否已开始最终响应；`main.go` 组装 `loggingMiddleware(recoveryMiddleware(mux))`。
+- 封装必要性：只靠 defer/recover 无法知道是否已发送 200；包装仅追踪 Write/WriteHeader，防止把残缺成功响应追加成假成功，不为状态码指标或缓冲系统预建抽象。
+- 范围边界：本节仅覆盖当前普通非流式 HTTP Handler；只对同一 goroutine 中的 panic 有效，不拦截 os.Exit、另起 goroutine 的 panic 或不可恢复的运行时故障。ResponseWriter 的可选接口不做完整代理，SSE/Flush/Hijack 必须在相应阶段补齐，不能把此版本称为通用生产恢复器。
+- 恢复逻辑：recover 必须由延迟函数直接调用；已有 ErrAbortHandler（含包装）继续抛出；其余 panic 服务端记堆栈，未 started 时清理 Content-Length/Content-Encoding 后 http.Error 500，已 started 时 panic(http.ErrAbortHandler) 交给标准库中断响应，不重试、不继续 panic 后业务代码。
+- 验证顺序：先新增仅本地教学 `/debug/panic` Handler，在接 recovery 前观察一次客户端失败，后接 recovery 观察 500 与后续 `/ping`；写后 panic 由隔离测试验证，不新增更多演示端点。核心代码仍由学习者编写，测试由辅助补充。
+- 最小验证：本例 fmt/test/vet/build、定向 `go test -race` 全部通过；新增 `recovery_test.go` 验证响应前 panic 500、清理旧头且不泄露内部值、响应后 panic 原样保留正文并抛 ErrAbortHandler、主动中断（含包装）继续传播、普通接口与外层请求日志正常。随机端口真实 HTTP 测试确认完整 500、部分 200 后 unexpected EOF、后续 ping 正常；原入口临时启动验证 `/debug/panic` 500 后 `/ping` 200，随后已关闭自建进程。
+- 理解验收：已按当前代码集中校正业务 panic 与中断信号的目的、recover 与再次 panic 的传播方向、响应前返回500和响应后中断是互斥分支；started 表示最终响应已确定，不保证客户端收到字节。采用解释分支作为迁移验收，不追加口试或新接口任务。
+- 图示：[`docs/images/r3-panic-recovery-boundary.svg`](docs/images/r3-panic-recovery-boundary.svg)，已渲染检查，内容与当前分支一致。
+- Git 检查点：提交主题 `feat(http): 添加请求级异常恢复与响应边界保护`；仅包含本阶段恢复示例、基线和回归测试、入口接线、计划、示例说明与图，不 push；实际提交哈希以 Git 历史为准。
+- 下一步：R.4 Context 与取消，学习正常取消与 panic 的不同责任。

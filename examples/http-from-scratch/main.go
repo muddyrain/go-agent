@@ -14,11 +14,12 @@ func main() {
 	mux.HandleFunc("POST /echo", echoHandler)
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("POST /greet", greetHandler)
+	mux.HandleFunc("GET /debug/panic", panicHandler)
 
 	address := "127.0.0.1:8090"
 	log.Printf("starting HTTP server at http://%s", address)
 
-	handler := loggingMiddleware(mux)
+	handler := loggingMiddleware(recoveryMiddleware(mux))
 
 	if err := http.ListenAndServe(address, handler); err != nil {
 		log.Fatalf("HTTP server stopped: %v", err)
@@ -67,4 +68,8 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 	if _, err := fmt.Fprintf(w, "Hello, %s\n", name); err != nil {
 		log.Printf("write hello response: %v", err)
 	}
+}
+
+func panicHandler(w http.ResponseWriter, r *http.Request) {
+	panic("recovery lesson demo")
 }
