@@ -13,6 +13,7 @@ func main() {
 	mux.HandleFunc("GET /ping", pingHandler)
 	mux.HandleFunc("POST /echo", echoHandler)
 	mux.HandleFunc("GET /hello", helloHandler)
+	mux.HandleFunc("POST /greet", greetHandler)
 
 	address := "127.0.0.1:8090"
 	log.Printf("starting HTTP server at http://%s", address)

@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1**
-- 下一小节：**R.2 JSON 与错误映射——把请求 JSON 转成 Go 数据，再构造 JSON 响应。**
+- 已掌握（二轮）：**R.1、R.2**
+- 下一小节：**R.3 中间件——在 Handler 外统一处理请求日志和异常。**
 
 ### R.1 最小 HTTP 服务
 
@@ -112,3 +112,21 @@
 - 运行版本边界：8090 的现有进程仍返回带感叹号的旧正文，与保存代码不同；没有关闭该进程或向它发送缺参请求。最新 Handler 通过隔离真实网络测试验证，保存代码另经构建；手动运行时需重启现有服务。
 - Git 检查点：本课采用 `feat(http): 完成原生 HTTP 基础与查询参数练习` 提交主题，提交范围为教学示例、最小测试、计划、示例说明与 R.1 图示，不 push；实际提交信息以 Git 历史为准。
 - 下一步：完成 R.1 后进入 R.2 JSON 请求与响应，不在本节引入中间件、Agent 或持久化。
+
+### R.2 JSON 请求与响应
+
+- 状态：已掌握；核心实现、集中理解验收和 name 独立变体完成；JSON 导出字段与标签问题已修复，本课检查和最新程序真实 HTTP 验证通过。
+- 用户可见目标：新增 `POST /greet`，接收 `{"name":"Go"}` 并返回 `{"message":"Hello, Go","name":"Go"}`；原 `/ping`、`/echo`、`/hello` 保持不变。
+- 文件边界：在原示例目录新增 `json_handler.go`，包含 `greetRequest`、`greetResponse` 和 `greetHandler`；只在 `main.go` 增加路由注册，不新增包、全局状态或通用 JSON 封装。
+- 关键概念：请求正文流与 JSON 数据不同；`ReadAll` 读取字节，`Unmarshal` 把 JSON 存入结构体，`Marshal` 把结构体转换成 JSON 字节，`Write` 才写回响应；导出字段、JSON tag、指针参数与局部变量作用域。
+- 请求契约：`Content-Type` 必须为 `application/json`（允许合法参数，如 charset）；请求体上限 4 KiB；`name` 去除首尾空白后必填；成功返回 message 和小写 name 两个字段。
+- 错误契约：缺少或错误 Content-Type 为 415；请求体超限为 413；读取失败、非法或不匹配类型的 JSON、空 name 为 400；响应编码失败为 500 并只记录服务端错误详情；已开始写出的失败只记日志，不能再改状态码。
+- 当前简化边界：成功响应为 JSON，错误响应暂用 `http.Error` 的纯文本；采用 `ReadAll + Unmarshal`，未知字段按标准库默认忽略，重复字段按默认处理，不实现严格字段或重复键拒绝；只用固定 string 响应结构，正常请求无法触发编码失败，不人为增加故障注入参数。
+- 调用链图：[`docs/images/r2-json-request-response.svg`](docs/images/r2-json-request-response.svg)，转换顺序已与当前实现核对。
+- 最小验证：`go fmt ./examples/http-from-scratch`、`go test ./examples/http-from-scratch -count=1`、`go vet ./examples/http-from-scratch` 与临时输出路径构建通过，仅覆盖本课示例。
+- 辅助测试：新增 `json_handler_test.go`，验证成功 JSON 能重新解析为恰含 message/name 的对象、首尾空白处理、引号/反斜杠/换行转义、非法 JSON、字段类型错误、空/缺少 name、null、缺少或错误 Content-Type、413 与模拟读取失败 400；固定字符串响应的 500 分支未人为触发。
+- 真实请求：基线阶段 `/greet` 八组及三个旧接口回归通过；最终验收时 8090 无服务，临时启动最新构建的原入口，在真实 HTTP 上验证三组双字段成功（普通、去空白、引号/反斜杠）及非法 JSON、类型错误、空 name、415、413 五组错误，随后 `/ping` 仍可用；仅关闭自建临时进程，不遗留服务。
+- 理解验收：已集中校正 Unmarshal 为 JSON 字节→Go 数据、Marshal 为 Go 数据→JSON 字节（非普通类型转换），先编码并检查错误再开始响应可保留返回 500 的机会；不再追加口试。
+- 独立变体：已使用导出字段 `Name string` 并加 `json:"name"` 标签，直接赋值已清理的 name；双字段回归测试通过。标签决定 JSON 字段名，导出性决定字段是否参与标准库编解码。
+- Git 检查点：本课提交主题 `feat(http): 添加 JSON 请求响应与字段校验`；范围为 JSON 示例、测试、入口接线、计划、示例说明和 R.2 图；不 push，实际提交哈希以 Git 历史为准。
+- 下一步：R.3 中间件；本节不改生产 AgentHub、不接模型、数据库或 Hertz。
