@@ -11,7 +11,7 @@
 | `selfbuilt-runtime` | Phase A | 观察自研 Message、Model、Registry、Executor、Memory 和 Agent Loop 如何组成工具调用闭环 | `go run ./examples/selfbuilt-runtime` |
 | `eino-direct` | B.1 | 观察 Eino Chain、Compile、Runnable 和 ChatModel 的最小直接回答 | `go run ./examples/eino-direct` |
 | `eino-tool` | B.2 | 观察 Eino Tool、ToolsNode 和 ReAct Agent 的同步工具调用闭环 | `go run ./examples/eino-tool` |
-| `http-from-scratch` | 二轮 R.1—R.6 | 标准库 HTTP 独立教学练习；R.1 三个纯文本接口与 R.2 JSON `/greet` 已验收，后者返回 message/name 并区分请求错误 | `go run ./examples/http-from-scratch` |
+| `http-from-scratch` | 二轮 R.1—R.6 | 标准库 HTTP 独立教学练习；纯文本与 JSON 接口、R.3.1 全局请求日志已验收；异常恢复尚未实现 | `go run ./examples/http-from-scratch` |
 
 ## 维护边界
 

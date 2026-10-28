@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2**
-- 下一小节：**R.3 中间件——在 Handler 外统一处理请求日志和异常。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1**
+- 下一小节：**R.3.2 异常恢复中间件——先观察 panic 请求行为，再建立请求级恢复边界。**
 
 ### R.1 最小 HTTP 服务
 
@@ -130,3 +130,24 @@
 - 独立变体：已使用导出字段 `Name string` 并加 `json:"name"` 标签，直接赋值已清理的 name；双字段回归测试通过。标签决定 JSON 字段名，导出性决定字段是否参与标准库编解码。
 - Git 检查点：本课提交主题 `feat(http): 添加 JSON 请求响应与字段校验`；范围为 JSON 示例、测试、入口接线、计划、示例说明和 R.2 图；不 push，实际提交哈希以 Git 历史为准。
 - 下一步：R.3 中间件；本节不改生产 AgentHub、不接模型、数据库或 Hertz。
+
+### R.3 中间件（分阶段推进）
+
+- 阶段：R.3.1 请求日志；R.3.2 异常恢复。一次只带写当前阶段，不提前增加恢复、状态码捕获或通用中间件框架。
+
+#### R.3.1 请求日志中间件
+
+- 状态：已掌握；loggingMiddleware 与入口接线已实现，调用范围与执行顺序已确认；本课测试、定向竞态检查、静态检查和构建通过。R.3 整体仍待 R.3.2 异常恢复完成。
+- 用户可见目标：每个请求结束时统一记录方法、路径和 Handler 调用耗时，成功请求、400 等请求错误及 ServeMux 返回的 404/405 均可见；旧响应保持不变。
+- 核心代码：新建 `examples/http-from-scratch/middleware.go`，实现 `loggingMiddleware(next http.Handler) http.Handler`；`main.go` 把 `loggingMiddleware(mux)` 传入 `ListenAndServe`。
+- 封装必要性：已有四个路由，逐 Handler 添加相同请求日志会重复并漏掉未匹配路由；在 ServeMux 外包装一次覆盖统一请求边界。
+- 数据与运行语义：启动时构造返回 Handler 并捕获 next；每次请求内单独记录 start，注册延迟日志函数，再同步执行 `next.ServeHTTP(w, r)`；不创建 goroutine，不读 Body、不写响应、不改变原 Handler。
+- 关键语法：接口方法集、HandlerFunc 类型转换、匿名函数闭包、函数返回 Handler、defer 执行时机。`time.Since(start)` 放进延迟闭包内，不能在注册 defer 时提前计算。
+- 日志边界：`method=%s path=%q duration=%s`；路径不含查询参数，%q 转义特殊字符；不记录正文、令牌或完整 URL。耗时表示下游 ServeHTTP 执行期间经过的时间，不是浏览器端到端耗时。
+- 暂缓边界：不捕获 HTTP 状态码，不做 recovery；defer 在 panic 展开时可执行日志但不会恢复 panic，不能把记录日志宣称为正常成功。R.3.2 再建立异常行为基线。
+- 学习图：[`docs/images/r3-request-logging-middleware.svg`](docs/images/r3-request-logging-middleware.svg)，教学目标示意。
+- 验证：本例 fmt/test/vet/build 通过；新增 `middleware_test.go` 检查构造不执行请求、下游调用一次、同一请求/Writer 原样传递、请求体仍可读、响应不变、日志在下游返回后执行且不含 query/body；404/405 仍有日志。随机端口真实 HTTP 测试确认 `/ping` 正文与日志；定向 `go test -race` 通过。
+- 理解确认：已统一校正启动时包装与请求时执行的区别；`next.ServeHTTP` 同步调用下游，defer 只记录日志、不恢复 panic。Express 的 app.use/next() 仅作框架机制类比，不假定 next() 返回意味着异步响应完成。
+- 独立迁移验收：已确认仅对 `/greet` 加日志应包装该 Handler，而非整个 mux；当前仍保留全局日志，未改动运行范围。本阶段采用解释变体验收，不额外新增接口。
+- Git 检查点：提交主题 `feat(http): 添加统一请求日志中间件`；仅包含本阶段中间件、测试、入口接线、计划、示例说明与学习图；不 push，实际提交哈希以 Git 历史为准。
+- 下一阶段：R.3.2 异常恢复中间件，先观察 panic 请求行为，再决定恢复边界。

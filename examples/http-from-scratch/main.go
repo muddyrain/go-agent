@@ -18,7 +18,9 @@ func main() {
 	address := "127.0.0.1:8090"
 	log.Printf("starting HTTP server at http://%s", address)
 
-	if err := http.ListenAndServe(address, mux); err != nil {
+	handler := loggingMiddleware(mux)
+
+	if err := http.ListenAndServe(address, handler); err != nil {
 		log.Fatalf("HTTP server stopped: %v", err)
 	}
 }
