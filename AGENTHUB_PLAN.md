@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）**
-- 下一小节：**R.4 Context 与取消——请求取消后，服务端如何协作停止正在进行的工作。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1**
+- 下一小节：**R.4.2 服务端处理超时——从请求 Context 派生超时，区分主动限时与客户端断开。**
 
 ### R.1 最小 HTTP 服务
 
@@ -167,3 +167,23 @@
 - 图示：[`docs/images/r3-panic-recovery-boundary.svg`](docs/images/r3-panic-recovery-boundary.svg)，已渲染检查，内容与当前分支一致。
 - Git 检查点：提交主题 `feat(http): 添加请求级异常恢复与响应边界保护`；仅包含本阶段恢复示例、基线和回归测试、入口接线、计划、示例说明与图，不 push；实际提交哈希以 Git 历史为准。
 - 下一步：R.4 Context 与取消，学习正常取消与 panic 的不同责任。
+
+### R.4 Context 与取消（分阶段推进）
+
+- 阶段：R.4.1 客户端断开时停止等待；R.4.2 服务端主动限制处理时间。一次只实现当前可运行目标。
+
+#### R.4.1 慢请求与客户端取消
+
+- 状态：已掌握（当前客户端取消教学范围）；slowHandler 与路由实现、辅助测试、真实 HTTP、静态检查、构建与定向竞态检查通过，集中理解验收完成。
+- 用户可见目标：新增 `GET /slow`，模拟5秒工作，正常完成返回纯文本 `slow work completed`；客户端提前断开后停止等待，服务日志记录 canceled，不尝试写回不存在的客户端；其他请求仍正常。
+- 核心代码：同目录新建 `slow_handler.go` 的 `slowHandler`；main 只增加路由，保留日志/恢复中间件与旧接口。
+- 数据流：`r.Context()` 取得本次请求的生命周期信号；单次 Timer 模拟工作完成，select 同时等待 timer.C 和 ctx.Done；取消分支由 Handler 主动 return，context 不会强制杀死 goroutine。
+- 当前选择：用 select 监听 ctx.Done，并在计时器就绪后再检查 ctx.Err；若多个 select case 同时就绪不存在固定优先级，额外检查只缩小竞争窗口，不保证写出前绝不取消；写入错误仍检查。
+- 语法与生命周期：Context 方法、只接收 channel、select 阻塞不忙轮询、Timer 和 defer Stop。使用 time.NewTimer 可在提前返回时主动停止计时器，不声称新版Go必须Stop才能防内存泄漏；不自己新增 goroutine或锁。
+- 边界：5秒是教学模拟时长，不是HTTP协议规定；请求context取消并不自动中断 Sleep/CPU运算或回滚已发生副作用；不将客户端curl超时值自动当成服务端deadline；本阶段取消分支不写500/499，不恢复panic。
+- 真实验证：8090已有教学服务，原入口curl确认正常慢请求返回200与完整正文，`--max-time 1` 以退出码28结束且未收到HTTP状态，随后ping返回200；没有替换、关闭已有进程。运行服务的终端日志未读取，取消与日志语义由隔离真实HTTP测试核验。
+- 最小测试：新增 `slow_handler_test.go`，已取消context快速返回且不写正文、等待中取消、随机端口真实正常请求约5秒返回200、客户端TCP断开后Handler及时结束且context.Canceled、后续ping仍正常；日志分别记录完成/取消，没有panic。示例 fmt/test/vet/build 和定向race全部通过，核心代码不改。
+- 理解验收：已通过当前代码解释与集中校正：Sleep 只暂停当前goroutine，不监听取消；Timer配合select同时等待完成和取消。Done返回取消时关闭的通知通道，Err返回取消原因（未取消为nil），取消不等于程序异常；由Handler主动return停止工作。采用解释作为迁移验收，不追加接口任务。
+- 图示：[`docs/images/r4-request-cancellation.svg`](docs/images/r4-request-cancellation.svg)，教学目标与实现一致。
+- Git检查点：提交主题 `feat(http): 添加慢请求与客户端取消处理`；仅提交本节Handler、测试、路由接线、计划、示例说明与图示。根目录未跟踪的 `http-from-scratch` 构建文件保留不纳入提交，.vscode/settings.json当前无变更；不push，实际提交哈希以Git历史为准。
+- 下一阶段：R.4.2 使用请求context派生处理超时，区分客户端断开与服务端deadline。
