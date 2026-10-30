@@ -12,6 +12,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /ping", pingHandler)
 	mux.HandleFunc("GET /slow", slowHandler)
+	mux.HandleFunc("GET /slow/timeout", slowTimeoutHandler)
 	mux.HandleFunc("POST /echo", echoHandler)
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("POST /greet", greetHandler)

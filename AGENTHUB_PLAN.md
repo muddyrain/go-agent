@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1**
-- 下一小节：**R.4.2 服务端处理超时——从请求 Context 派生超时，区分主动限时与客户端断开。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2**
+- 下一小节：**R.5 HTTP 测试——自己构造请求、调用 Handler 并断言状态码与正文。**
 
 ### R.1 最小 HTTP 服务
 
@@ -187,3 +187,20 @@
 - 图示：[`docs/images/r4-request-cancellation.svg`](docs/images/r4-request-cancellation.svg)，教学目标与实现一致。
 - Git检查点：提交主题 `feat(http): 添加慢请求与客户端取消处理`；仅提交本节Handler、测试、路由接线、计划、示例说明与图示。根目录未跟踪的 `http-from-scratch` 构建文件保留不纳入提交，.vscode/settings.json当前无变更；不push，实际提交哈希以Git历史为准。
 - 下一阶段：R.4.2 使用请求context派生处理超时，区分客户端断开与服务端deadline。
+
+#### R.4.2 服务端处理超时
+
+- 状态：已掌握（当前协作式、非流式处理超时教学范围）；核心实现、路由接线、集中理解校正、专项测试和真实入口验证通过。
+- 用户可见目标：保留 `/slow` 的5秒成功/取消行为；新增 `GET /slow/timeout`，同样的5秒模拟工作限制为2秒，未提前断开时返回503与纯文本 `slow work timed out`；客户端先断开则取消等待，不追加503。
+- 核心代码：在现有 `slow_handler.go` 新增薄入口 `slowTimeoutHandler`，用 `context.WithTimeout(r.Context(), 2*time.Second)` 派生ctx，defer cancel，再调用 `slowHandler(w, r.WithContext(ctx))`；main只注册新路由。
+- 封装必要性：两条真实路由复用同一等待/响应逻辑，超时入口只承担处理预算，不复制5秒工作或添加通用中间件。
+- 当前实现调整：slowHandler的select只等待Done或Timer；出select后统一检查ctx.Err，避免两个分支重复取消/超时映射。DeadlineExceeded返回503，其他取消只记日志并return；无取消则写成功正文。
+- 关键语义：WithTimeout不等待2秒才返回；父ctx取消传给子ctx，子ctx到期不取消父ctx，父deadline更早时仍以更早者为限。WithContext返回请求浅拷贝，不发网络请求，也不原地修改原请求；必须传递返回的请求才能让slowHandler监听子ctx。
+- 生命周期：defer cancel在下游同步返回后释放派生ctx资源，不是立即取消；定时器Stop与ctx cancel分别结束模拟工作Timer和处理预算。超时通知由Handler协作处理，不强制终止CPU/Sleep/外部操作。
+- 响应约定：本教学端点把处理预算耗尽映射为503，不把所有超时机械映射为504，也不把ctx自动取消等同于自动HTTP错误响应；未开始写响应时才能选择状态码，仍检查成功写出错误与写出竞争边界。
+- 验证：现有8090教学服务curl确认新端点约2秒完整503、客户端--max-time 1以退出码28结束且无HTTP状态、旧slow约5秒200、ping200；没有替换或关闭用户进程。用户服务终端日志未读取，取消/超时日志由随机端口网络测试核验。
+- 辅助测试：在 `slow_handler_test.go` 保留R.4.1回归并新增超时测试，验证已取消父ctx快速返回且不写错误正文、父更早deadline生效、真实2秒503且外层请求父ctx仍未取消、TCP断开后子处理及时结束、后续ping正常；日志区分超时/取消，没有panic。示例fmt/test/vet/build及全部慢请求定向race通过，核心代码未代改。
+- 理解验收：已集中厘清空case仍执行接收、无default的select等待可进行的通道操作、选中后继续统一Err判断；select不是if，也不必须两个分支。DeadlineExceeded表示截止时间耗尽取消，不是任务正常完成。采用解释作为迁移验收，不追加任务。
+- 图示：[`docs/images/r4-server-timeout.svg`](docs/images/r4-server-timeout.svg)，已渲染检查，内容与当前实现一致。
+- Git检查点：提交主题 `feat(http): 添加请求级处理超时与错误响应`；仅含本节Handler调整、路由、测试、计划、示例说明与图示，.vscode/settings.json无变化；不push。未跟踪构建文件 `http-from-scratch` 保留不提交，实际哈希以Git历史为准。
+- 下一阶段：R.5 HTTP测试，学习如何自己构造请求和断言这些行为。
