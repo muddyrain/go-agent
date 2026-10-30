@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2**
-- 下一小节：**R.5 HTTP 测试——自己构造请求、调用 Handler 并断言状态码与正文。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1**
+- 下一小节：**R.5.2 路由分发测试——通过 ServeMux 核对方法与路径，区分路由结果与 Handler 逻辑。**
 
 ### R.1 最小 HTTP 服务
 
@@ -204,3 +204,22 @@
 - 图示：[`docs/images/r4-server-timeout.svg`](docs/images/r4-server-timeout.svg)，已渲染检查，内容与当前实现一致。
 - Git检查点：提交主题 `feat(http): 添加请求级处理超时与错误响应`；仅含本节Handler调整、路由、测试、计划、示例说明与图示，.vscode/settings.json无变化；不push。未跟踪构建文件 `http-from-scratch` 保留不提交，实际哈希以Git历史为准。
 - 下一阶段：R.5 HTTP测试，学习如何自己构造请求和断言这些行为。
+
+### R.5 HTTP 测试（分阶段推进）
+
+- 阶段：R.5.1 直接测试Handler与表驱动断言；R.5.2 再通过ServeMux/测试服务器验证路由分发。每次只推进一个阶段。
+
+#### R.5.1 Handler 表驱动测试
+
+- 状态：已掌握（直接Handler测试范围）；学习者完成四用例表驱动改写，状态/头/正文断言、反向验证、隔离缺参回归与包检查通过。
+- 用户可见目标：改写已有 `main_test.go` 的 `TestHelloHandler`，一次命令分别显示Go/HTTP成功、缺少name、显式空name四个子测试；断言状态、响应头和正文。故意改错一个预期正文并观察失败，恢复后再通过，以验证断言确实能捕获差异。
+- 核心代码：只替换 `TestHelloHandler`；既有import足够，不新建测试文件、不改helloHandler或main接线；保留 `TestHelloHandlerMissingNameDoesNotExit` 的隔离回归。
+- 数据流：用例切片提供请求目标与独立预期；t.Run每次创建Request和Recorder，直接同步调用helloHandler；调用完成后Result取得响应快照，读取正文并按契约断言。不会启动服务、占用8090或发网络请求。
+- 关键语法：`[]struct`匿名结构体切片、命名字段复合字面量、range的索引丢弃与当前用例、子测试匿名函数；Test签名与文件名约定、t.Fatalf/t.Errorf区别。t.Fatalf终止当前测试而非退出整个服务，不与log.Fatalf混淆；本节不t.Parallel。
+- API范围：NewRequest构造服务端请求对象不发送；NewRecorder实现ResponseWriter并记录写出；Result必须在Handler完成后调用，Header为写出时快照，Body需关闭。预期结果按接口契约写，不从实际输出反推。
+- 边界：直接调用Handler不经过ServeMux与中间件，不据此宣称路由方法限制或404/405已验证；普通内存Recorder不能代替真实网络取消/流式中断测试。
+- 最小验证：四个具名子测试通过；使用临时Go overlay仅把go用例预期改为 `Hello, Wrong`，退出码1并定位正文断言失败，用户源码保持不变；正常源码四子项重新PASS。hello缺参独立进程回归、示例包test与vet通过，格式化与diff检查通过。仅测试变化，无需启动8090服务。
+- 理解验收：已解释以用例数据组织四种查询参数场景，由同一测试流程直接调用Handler并比较独立预期；保留直接调用不验证ServeMux的范围边界。采用用例改写及错误预期验证作为迁移验收，不新增接口或追加任务。
+- 图示：[`docs/images/r5-handler-test-flow.svg`](docs/images/r5-handler-test-flow.svg)，已渲染检查，与当前测试流程一致。
+- Git检查点：提交主题 `test(http): 完善 hello 表驱动测试与响应断言`；仅本节测试、计划、示例说明及图示，.vscode/settings.json无变化；未跟踪的.DS_Store保留不提交，不push，实际哈希以Git历史为准。
+- 下一阶段：R.5.2 在同样的请求/响应心智模型上加入真实路由分发。

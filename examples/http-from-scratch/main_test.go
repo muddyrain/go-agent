@@ -90,20 +90,65 @@ func TestEchoHandlerReadFailure(t *testing.T) {
 }
 
 func TestHelloHandler(t *testing.T) {
-	for _, name := range []string{"Go", "HTTP"} {
-		t.Run(name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, "/hello?name="+name, nil)
-			response := httptest.NewRecorder()
-			helloHandler(response, request)
 
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
+	tests := []struct {
+		name       string
+		target     string
+		wantStatus int
+		wantBody   string
+	}{
+		{
+			name:       "go",
+			target:     "/hello?name=Go",
+			wantStatus: http.StatusOK,
+			wantBody:   "Hello, Go\n",
+		},
+		{
+			name:       "http",
+			target:     "/hello?name=HTTP",
+			wantStatus: http.StatusOK,
+			wantBody:   "Hello, HTTP\n",
+		},
+		{
+			name:       "missing_name",
+			target:     "/hello",
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "name parameter is required\n",
+		},
+		{
+			name:       "empty_name",
+			target:     "/hello?name=",
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "name parameter is required\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, tt.target, nil)
+			recorder := httptest.NewRecorder()
+
+			helloHandler(recorder, request)
+
+			response := recorder.Result()
+			defer response.Body.Close()
+
+			body, err := io.ReadAll(response.Body)
+
+			if err != nil {
+				t.Fatalf("read response body: %v", err)
 			}
-			if got := response.Header().Get("Content-Type"); got != "text/plain; charset=utf-8" {
-				t.Errorf("Content-Type = %q, want plain UTF-8 text", got)
+
+			if response.StatusCode != tt.wantStatus {
+				t.Errorf("status = %d, want %d", response.StatusCode, tt.wantStatus)
 			}
-			if got, want := response.Body.String(), "Hello, "+name+"\n"; got != want {
-				t.Errorf("body = %q, want %q", got, want)
+
+			if got := response.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+				t.Errorf("Content-Type = %q, want %q", got, "text/plain; charset=utf-8")
+			}
+
+			if got := string(body); got != tt.wantBody {
+				t.Errorf("body = %q, want %q", got, tt.wantBody)
 			}
 		})
 	}
