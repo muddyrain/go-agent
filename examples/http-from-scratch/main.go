@@ -9,14 +9,7 @@ import (
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", pingHandler)
-	mux.HandleFunc("GET /slow", slowHandler)
-	mux.HandleFunc("GET /slow/timeout", slowTimeoutHandler)
-	mux.HandleFunc("POST /echo", echoHandler)
-	mux.HandleFunc("GET /hello", helloHandler)
-	mux.HandleFunc("POST /greet", greetHandler)
-	mux.HandleFunc("GET /debug/panic", panicHandler)
+	mux := newMux()
 
 	address := "127.0.0.1:8090"
 	log.Printf("starting HTTP server at http://%s", address)
@@ -74,4 +67,19 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 
 func panicHandler(w http.ResponseWriter, r *http.Request) {
 	panic("recovery lesson demo")
+}
+
+// 启动入口和测试共用路由注册，避免两份配置发生偏差。
+func newMux() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /ping", pingHandler)
+	mux.HandleFunc("GET /slow", slowHandler)
+	mux.HandleFunc("GET /slow/timeout", slowTimeoutHandler)
+	mux.HandleFunc("POST /echo", echoHandler)
+	mux.HandleFunc("GET /hello", helloHandler)
+	mux.HandleFunc("POST /greet", greetHandler)
+	mux.HandleFunc("GET /debug/panic", panicHandler)
+
+	return mux
 }

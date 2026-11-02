@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1**
-- 下一小节：**R.5.2 路由分发测试——通过 ServeMux 核对方法与路径，区分路由结果与 Handler 逻辑。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2**
+- 下一小节：**R.6 SSE——从完整响应转向逐段发送并刷新，处理流式Writer能力边界。**
 
 ### R.1 最小 HTTP 服务
 
@@ -223,3 +223,19 @@
 - 图示：[`docs/images/r5-handler-test-flow.svg`](docs/images/r5-handler-test-flow.svg)，已渲染检查，与当前测试流程一致。
 - Git检查点：提交主题 `test(http): 完善 hello 表驱动测试与响应断言`；仅本节测试、计划、示例说明及图示，.vscode/settings.json无变化；未跟踪的.DS_Store保留不提交，不push，实际哈希以Git历史为准。
 - 下一阶段：R.5.2 在同样的请求/响应心智模型上加入真实路由分发。
+
+#### R.5.2 路由分发测试
+
+- 状态：已掌握（当前路由分发测试范围）；newMux提取、TestRoutes、真实HTTP回归及反向验证通过，路由与Handler责任边界已集中校正。
+- 用户可见目标：运行TestRoutes自动核对ping200、hello成功200、hello缺参400、POST hello405（Allow包含GET/HEAD）、未知路径404；失败可定位到路由与方法约束，而非直接绕过mux调用业务。
+- 核心代码：在现有main.go把全部七条路由原样提取为 `newMux() *http.ServeMux`，main调用newMux再接原日志/恢复包装；main_test.go新增TestRoutes并调用newMux，不复制路由注册，保留原测试。
+- 封装必要性：新增真实测试调用方；main与测试需要同一份路由配置，提取消除重复注册与测试/启动漂移。newMux只构造路由不监听，不引入通用Server/配置层，也不改Handler。
+- 数据流：NewRequest构造method与target，Recorder收集响应；newMux.ServeHTTP按模式匹配再调用Handler，或生成404/405。Result后断言状态、正文、Content-Type与Allow，五用例为表驱动测试。
+- 关键语法：返回具体指针*ServeMux用于表达路由构造职责；return mux不会销毁返回对象；ServeHTTP是同接口下的入口但本次目标为路由器。GET模式也匹配HEAD，因此405 Allow应包含GET与HEAD；HTTP方法与查询参数含义不同。
+- 范围边界：本节核心测试仍在内存里，不是发起网络请求；共用newMux能验证实际路由配置，但不因此宣称Listener/端口/日志/恢复整体通过。验收时辅助用同一mux进行随机端口真实HTTP回归并检查原入口。
+- 验证：TestRoutes五子测试通过；临时Go overlay仅去掉GET方法约束，POST用例实际200/成功正文/缺Allow，三项断言失败退出码1，用户源文件未改；正常源码回归通过。示例fmt/test/vet/build通过。
+- 辅助真实HTTP：新增TestRoutesRealHTTP，共用newMux及原日志/恢复顺序，在随机本地端口验证200/400/405/404、正文和响应头。8090无服务时临时启动最新构建原入口，curl五组结果通过，随后只关闭自建进程，无遗留服务。
+- 理解验收：已解释缺参400由helloHandler字段检查返回，405由ServeMux按注册方法约束返回；直接调用helloHandler绕过ServeMux，注册的GET约束不会自动附到函数上。临时overlay对同一POST请求实测直接Handler200、经mux405，用户源码未改；采用解释及边界对照作为迁移验收，不追加任务。
+- 图示：[`docs/images/r5-routing-test-flow.svg`](docs/images/r5-routing-test-flow.svg)，本节路由测试目标与实现一致。
+- Git检查点：提交主题 `test(http): 共用路由注册并验证方法与路径分发`；仅本节路由提取、测试、计划、示例说明与图，.vscode/settings.json无变化；.DS_Store等无关文件保留不提交，不push，实际哈希以Git历史为准。
+- 下一阶段：R.6 SSE，从完整响应转向逐段发送并刷新，届时再处理流式Writer能力边界。

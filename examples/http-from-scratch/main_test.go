@@ -194,3 +194,126 @@ func TestHelloHandlerMissingNameDoesNotExit(t *testing.T) {
 		t.Fatalf("missing-name request must return 400 without exiting: %v\n%s", err, output)
 	}
 }
+
+func TestRoutes(t *testing.T) {
+	mux := newMux()
+
+	tests := []struct {
+		name       string
+		method     string
+		target     string
+		wantStatus int
+		wantBody   string
+		wantAllow  string
+	}{
+		{
+			name:       "ping",
+			method:     http.MethodGet,
+			target:     "/ping",
+			wantStatus: http.StatusOK,
+			wantBody:   "pong\n",
+		},
+		{
+			name:       "hello",
+			method:     http.MethodGet,
+			target:     "/hello?name=Go",
+			wantStatus: http.StatusOK,
+			wantBody:   "Hello, Go\n",
+		},
+		{
+			name:       "hello_missing_name",
+			method:     http.MethodGet,
+			target:     "/hello",
+			wantStatus: http.StatusBadRequest,
+			wantBody:   "name parameter is required\n",
+		},
+		{
+			name:       "wrong_method",
+			method:     http.MethodPost,
+			target:     "/hello?name=Go",
+			wantStatus: http.StatusMethodNotAllowed,
+			wantBody:   "Method Not Allowed\n",
+			wantAllow:  "GET, HEAD",
+		},
+		{
+			name:       "unknown_path",
+			method:     http.MethodGet,
+			target:     "/missing",
+			wantStatus: http.StatusNotFound,
+			wantBody:   "404 page not found\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.target, nil)
+			recorder := httptest.NewRecorder()
+
+			mux.ServeHTTP(recorder, request)
+
+			response := recorder.Result()
+			defer response.Body.Close()
+
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				t.Fatalf("read response body: %v", err)
+			}
+
+			if response.StatusCode != tt.wantStatus {
+				t.Errorf("status = %d, want %d", response.StatusCode, tt.wantStatus)
+			}
+
+			if got := string(body); got != tt.wantBody {
+				t.Errorf("body = %q, want %q", got, tt.wantBody)
+			}
+
+			if got := response.Header.Get("Content-Type"); got != "text/plain; charset=utf-8" {
+				t.Errorf("Content-Type = %q, want %q", got, "text/plain; charset=utf-8")
+			}
+
+			if got := response.Header.Get("Allow"); got != tt.wantAllow {
+				t.Errorf("Allow = %q, want %q", got, tt.wantAllow)
+			}
+		})
+	}
+
+}
+
+func TestRoutesRealHTTP(t *testing.T) {
+	// 使用启动入口同一份路由注册和包装，通过随机本地端口核对真实HTTP响应。
+	server := httptest.NewServer(loggingMiddleware(recoveryMiddleware(newMux())))
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 2 * time.Second
+
+	for _, tt := range []struct {
+		method string
+		path   string
+		status int
+		body   string
+		allow  string
+	}{
+		{http.MethodGet, "/ping", http.StatusOK, "pong\n", ""},
+		{http.MethodGet, "/hello?name=Go", http.StatusOK, "Hello, Go\n", ""},
+		{http.MethodGet, "/hello", http.StatusBadRequest, "name parameter is required\n", ""},
+		{http.MethodPost, "/hello?name=Go", http.StatusMethodNotAllowed, "Method Not Allowed\n", "GET, HEAD"},
+		{http.MethodGet, "/missing", http.StatusNotFound, "404 page not found\n", ""},
+	} {
+		request, err := http.NewRequest(tt.method, server.URL+tt.path, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response, err := client.Do(request)
+		if err != nil {
+			t.Fatalf("%s %s: %v", tt.method, tt.path, err)
+		}
+		body, readErr := io.ReadAll(response.Body)
+		response.Body.Close()
+		if readErr != nil {
+			t.Fatalf("read %s response: %v", tt.path, readErr)
+		}
+		if response.StatusCode != tt.status || string(body) != tt.body || response.Header.Get("Allow") != tt.allow || response.Header.Get("Content-Type") != "text/plain; charset=utf-8" {
+			t.Errorf("%s %s: status=%d body=%q Allow=%q Content-Type=%q", tt.method, tt.path, response.StatusCode, body, response.Header.Get("Allow"), response.Header.Get("Content-Type"))
+		}
+	}
+}
