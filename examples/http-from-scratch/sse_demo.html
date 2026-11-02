@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SSE 消息接收练习</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      color: #203747;
+      background: #f8fafc;
+      font: 16px/1.8 system-ui, sans-serif;
+    }
+
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 26px;
+    }
+
+    button {
+      min-height: 44px;
+      padding: 8px 16px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: default;
+    }
+
+    pre {
+      padding: 16px;
+      border: 1px solid #b8c7d1;
+      background: #ffffff;
+      font: inherit;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>SSE 消息接收练习</h1>
+    <p>消息来自当前 Go 服务的 /events 接口。</p>
+
+    <p>状态：<span id="status" role="status">正在连接</span></p>
+    <button id="stop" type="button">停止接收</button>
+    <pre id="output" aria-live="polite"></pre>
+  </main>
+
+  <script>
+    const status = document.getElementById("status");
+    const output = document.getElementById("output");
+    const stopButton = document.getElementById("stop");
+
+    const source = new EventSource("/events");
+
+    source.addEventListener("open", () => {
+      status.textContent = "正在接收";
+    });
+
+    source.addEventListener("message", (event) => {
+      output.textContent += event.data + "\n";
+    });
+
+    // done 是应用约定；主动关闭，避免有限事件流结束后自动重连。
+    source.addEventListener("done", (event) => {
+      source.close();
+      output.textContent += event.data + "\n";
+      status.textContent = "已完成";
+      stopButton.disabled = true;
+    });
+
+    stopButton.addEventListener("click", () => {
+      source.close();
+      status.textContent = "已手动停止";
+      stopButton.disabled = true;
+    });
+
+    // 本节选择异常即停止，不实现自动重试。
+    source.addEventListener("error", () => {
+      source.close();
+      status.textContent = "连接异常，未正常完成；刷新页面可重试";
+      stopButton.disabled = true;
+    });
+  </script>
+</body>
+</html>

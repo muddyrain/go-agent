@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1（固定事件、逐段写出与刷新范围）**
-- 当前小节：**R.6.1 已验收；下一节 R.6.2 浏览器 EventSource 消费（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2（当前固定事件与浏览器消费教学范围）**
+- 当前小节：**R.6.2 已验收；下一节 R.7 Hertz 对照（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -259,3 +259,21 @@
 - 图示：[`docs/images/r6-sse-write-flush.svg`](docs/images/r6-sse-write-flush.svg)，已渲染回读，与固定事件顺序和刷新调用链一致。
 - Git检查点：提交主题 `feat(http): 添加 SSE 逐段响应与刷新边界验证`；范围仅本节Handler、路由、恢复刷新方法、相关测试、计划、示例说明和图示；.vscode/settings.json无变更，.DS_Store保留不提交，不push。实际提交哈希以Git历史为准。
 - 下一阶段：R.6.2 使用浏览器EventSource消费事件并区分业务done、HTTP流结束与重连。
+
+#### R.6.2 浏览器 EventSource 消费
+
+- 状态：已掌握（当前固定事件与浏览器消费教学范围）；学习者页面、页面Handler与路由已保存，HTTP测试、真实浏览器逐事件显示/关闭/停止、重连对照和包检查通过。
+- 用户可见目标：访问GET /events/demo，页面自动连接现有/events，三条message逐行出现；done显示发送完成并close，停止按钮可提前关闭，不继续等待或自动重连。
+- 核心代码：同示例新增sse_demo.html与sse_page.go的eventsPageHandler；newMux只新增GET /events/demo。ServeFile使用固定路径examples/http-from-scratch/sse_demo.html，只返回该文件，不公开仓库目录；运行约定为项目根启动。
+- 调用链：浏览器请求页面，Go返回HTML；页面JavaScript创建EventSource('/events')发起第二个请求；原eventsHandler写/刷新SSE，浏览器解析后按message/done事件名调用监听函数。两次请求各有自己的Handler/响应生命周期。
+- 生命周期：message只追加event.data文本；done关闭并标完成；按钮关闭并标手动停止；error关闭并显示未正常完成，当前有限流选择不自动重试。close是客户端停止监听/重连，不等于服务端直接调用defer；服务端由请求取消或正常返回结束。
+- 边界：无模型、Hertz、WebSocket、CORS配置、认证、续传、重试封装或前端构建；不新增Ticker、定时刷新页面或拼接不可信innerHTML；固定单行data无需JSON.parse。
+- 关键概念：Go Handler可返回HTML，不在服务端执行JS；ServeFile没有error返回值，不能套if err写法；相对文件路径基于进程工作目录。EventSource构造发起连接，addEventListener登记回调而非立即执行，message和done职责分开；textContent安全显示文本。
+- 辅助测试：新增sse_page_test.go，测试内用t.Chdir模拟项目根启动约定（不并行）；GET页面200且正文精确等于保存HTML，HEAD200无正文，POST405与Allow=GET, HEAD，子路径404不暴露目录。随机端口通过newMux和原中间件验证页面/事件两次独立请求、内容类型与done结尾，日志等待服务结束后核对。
+- 浏览器验收：在既有8090服务上使用shot.py与真实Chromium，主页面四行输出与已完成/禁用按钮正常；临时同源iframe加载原HTML并仅包裹EventSource观测，四事件约2/1003/2003/3005毫秒到达，一次open和一次close，完成后继续观察3.5秒未重复连接；首条后点击停止，继续观察3.3秒仍仅首条，状态已手动停止、一次close，无额外消息。
+- 重连对照：独立临时原生EventSource在done/error时不close，收到done后观察到第二次open，再主动清理。正式页面done/error都close，不能仅删done里的close就断言一定重连。未修改磁盘HTML、后端事件逻辑或用户服务进程。
+- 验证边界：示例fmt、完整test、定向页面/SSE网络race、vet和临时路径build通过。桌面截图回读完整且无横向溢出/脚本错误；shot.py将四次主动关闭EventSource产生的requestfailed统一报network_error，验收脚本的close计数、输出不再变化和重连对照通过，用于解释此场景而非宣称报告零错误。缺少favicon仅为外观提示，保留原教学页面不顺带修改；未核验移动端实际交互。
+- 理解验收：已确认路由返回HTML，由浏览器执行其中JS再请求/events；不是HTML Handler直接调用SSE Handler。message追加文本、done作为应用约定由监听回调close，服务端响应结束与客户端停止重连职责不同。采用实现解释和临时对照验收，不追加接口口试。
+- 图示：docs/images/r6-browser-eventsource.svg，已渲染回读，与页面请求、事件请求和关闭关系一致。
+- Git检查点：提交主题 `feat(http): 添加浏览器 SSE 消费与关闭验证`；仅本节页面、页面Handler/路由、测试、计划、示例说明及图示；.vscode/settings.json无变化，.DS_Store保留不提交，不push。实际哈希以Git历史为准。
+- 下一步：本节验收后进入R.7 Hertz对照，把已建立的标准库HTTP心智模型迁移到框架；不在本节提前改生产代码。

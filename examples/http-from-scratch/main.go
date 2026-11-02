@@ -81,6 +81,6 @@ func newMux() *http.ServeMux {
 	mux.HandleFunc("POST /greet", greetHandler)
 	mux.HandleFunc("GET /debug/panic", panicHandler)
 	mux.HandleFunc("GET /events", eventsHandler)
-
+	mux.HandleFunc("GET /events/demo", eventsPageHandler)
 	return mux
 }
