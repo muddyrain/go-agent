@@ -88,10 +88,10 @@
 
 ## 7. 当前学习位置
 
-- 当前阶段：**二轮第一编：HTTP 筑基**
+- 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2（当前固定事件与浏览器消费教学范围）**
-- 当前小节：**R.6.2 已验收；下一节 R.7 Hertz 对照（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1（各自限定教学范围）**
+- 当前小节：**R.7.1 已验收；下一节 R.7.2 Hertz JSON 请求与响应对照。**
 
 ### R.1 最小 HTTP 服务
 
@@ -277,3 +277,21 @@
 - 图示：docs/images/r6-browser-eventsource.svg，已渲染回读，与页面请求、事件请求和关闭关系一致。
 - Git检查点：提交主题 `feat(http): 添加浏览器 SSE 消费与关闭验证`；仅本节页面、页面Handler/路由、测试、计划、示例说明及图示；.vscode/settings.json无变化，.DS_Store保留不提交，不push。实际哈希以Git历史为准。
 - 下一步：本节验收后进入R.7 Hertz对照，把已建立的标准库HTTP心智模型迁移到框架；不在本节提前改生产代码。
+
+### R.7 Hertz 对照（分阶段推进）
+
+#### R.7.1 路由与 Handler 对照
+
+- 状态：已掌握（当前路由与普通文本响应对照范围）；核心实现、测试、真实入口验证通过，方法配置与路由责任已集中校正。
+- 用户可见目标：新增独立examples/hertz-from-scratch，监听127.0.0.1:8091；GET /ping返回pong换行，GET /hello?name=Go返回Hello, Go换行，缺少/空name400，POST hello405，未知路径404。保持原8090示例与生产代码不变。
+- 核心代码：学习者只新建main.go；newServer构造server.New、注册两条GET，main调用Spin，两个Handler使用(_ context.Context, c *app.RequestContext)、c.Query与c.String；复用根go.mod已有Hertz v0.10.6，不新增模块或改依赖。
+- 封装理由：newServer同时供启动与后续路由测试使用，避免两份注册表漂移；本节不建应用层/依赖注入框架。server.New不装默认中间件，日志/recovery对照留后续阶段；已有internal/httpapi/server.go使用Default，与此教学构造选择不同。
+- Go/API：app.HandlerFunc是func(context.Context,*app.RequestContext)，不等于http.HandlerFunc；_是保留参数类型但不命名使用，c包含框架请求/响应操作，ctx用于取消/期限/向下游传递。c.String没有error返回，配置普通响应数据不等于客户端已收到，不能把它说成底层网络Write。WithHostPorts返回配置项，New接收可变数量配置项，构造不监听，Spin启动并等待结束。
+- 预验证：本机缓存版本已查源码，临时内存PerformRequest检查Query与String字节；WithHandleMethodNotAllowed(false)时POST/HEAD hello404，开启后405，未知路径仍404。Hertz GET不自动包含HEAD，自动405不生成ServeMux同款Allow；本节明确这些默认差异，不假装完整HTTP响应契约完全等价。
+- 方法配置：本节显式server.WithHandleMethodNotAllowed(true)用于延续405观察目标；不改现有AgentHub服务配置，不追加HEAD或NoMethod封装。
+- 实现验证：助手新增main_test.go共用newServer，覆盖ping、Go/HTTP查询、缺少/空name、POST405、HEAD不自动注册、未知路径404与正文/内容类型。隔离实例开启/关闭配置对照，同一POST分别405/404，正确GET不变、未知路径始终404；直接调用helloHandler的POST仍200，证明GET约束由路由器执行。示例fmt/test/vet及临时路径build通过，未修改核心代码。
+- 真实入口：保留既有8091服务，curl六组请求依次200/200/400/400/405/404且正文正确。没有停止用户进程；本节仅核验Hertz教学示例，不运行生产AgentHub或模型。
+- 检查点：提交主题 `feat(http): 添加 Hertz 路由与 Handler 对照`，范围仅本节main.go、main_test.go、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push，实际哈希以Git历史为准。
+- 理解迁移：已集中校正GET注册而非函数本体执行方法限制；false不会把POST转成GET，true只识别同路径其他方法并返回405；关闭405识别不等于鉴权或隐藏所有访问。c.Query仍需业务空值判断，c.String负责普通响应构造。采用当前代码解释与隔离对照验收，不追加/chat或模型任务。
+- 图示：docs/images/r7-hertz-handler-comparison.svg，标准库与Hertz对应职责及GET/HEAD默认差异，保存后渲染核对。
+- 下一阶段：R.7.2对照JSON请求/响应，再按实际需要进入框架中间件与流式能力；一次只带写当前阶段。
