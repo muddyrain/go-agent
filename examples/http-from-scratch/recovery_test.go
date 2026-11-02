@@ -76,6 +76,114 @@ func TestRecoveryMiddlewarePreservesAbortSignal(t *testing.T) {
 	}
 }
 
+func TestRecoveryWriterFlushStartsResponse(t *testing.T) {
+	response := httptest.NewRecorder()
+	writer := &recoveryWriter{ResponseWriter: response}
+	if err := http.NewResponseController(writer).Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if !writer.started || !response.Flushed || response.Code != http.StatusOK || response.Body.Len() != 0 {
+		t.Fatal("flush without body must commit 200, record started and reach the underlying writer")
+	}
+	writer.WriteHeader(http.StatusInternalServerError)
+	if response.Code != http.StatusOK {
+		t.Fatal("cannot replace status after flush")
+	}
+}
+
+func TestRecoveryWriterFlushErrors(t *testing.T) {
+	failure := errors.New("injected flush failure")
+	for _, tt := range []struct {
+		name string
+		next http.ResponseWriter
+		want error
+	}{
+		{"underlying_error", &sseProbeWriter{ResponseWriter: httptest.NewRecorder(), flushErr: failure}, failure},
+		{"unsupported", sseBasicWriter{httptest.NewRecorder()}, http.ErrNotSupported},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			writer := &recoveryWriter{ResponseWriter: tt.next}
+			err := http.NewResponseController(writer).Flush()
+			if !errors.Is(err, tt.want) || !writer.started {
+				t.Fatalf("flush error=%v started=%v", err, writer.started)
+			}
+		})
+	}
+}
+
+func TestRecoveryMiddlewareAfterFlushAborts(t *testing.T) {
+	captureRequestLog(t)
+	response := httptest.NewRecorder()
+	handler := recoveryMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			panic(err)
+		}
+		panic("failure after headers flushed")
+	}))
+	value := caughtPanic(func() { handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/flush", nil)) })
+	if value != http.ErrAbortHandler || response.Code != 200 || !response.Flushed || response.Body.Len() != 0 {
+		t.Fatal("flush-only panic must abort without appending 500")
+	}
+}
+
+func TestRecoveryMiddlewareRealHTTPAfterFlush(t *testing.T) {
+	output := captureRequestLog(t)
+	release := make(chan struct{})
+	defer func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	}()
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ping" {
+			pingHandler(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		if _, err := io.WriteString(w, firstSSEEvent); err != nil {
+			return
+		}
+		if err := http.NewResponseController(w).Flush(); err != nil {
+			return
+		}
+		select {
+		case <-release:
+			panic("failure after SSE flush")
+		case <-r.Context().Done():
+		}
+	})
+	server := httptest.NewServer(loggingMiddleware(recoveryMiddleware(next)))
+	defer server.Close()
+	client := server.Client()
+	client.Timeout = 3 * time.Second
+	response, err := client.Get(server.URL + "/partial")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	close(release)
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != 200 || string(body) != firstSSEEvent || !errors.Is(readErr, io.ErrUnexpectedEOF) {
+		t.Fatalf("expected flushed event and interrupted HTTP/1.1 body, got %d %q %v", response.StatusCode, body, readErr)
+	}
+	ping, err := client.Get(server.URL + "/ping")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pingBody, pingErr := io.ReadAll(ping.Body)
+	ping.Body.Close()
+	server.Close()
+	if ping.StatusCode != 200 || string(pingBody) != "pong\n" || pingErr != nil {
+		t.Fatal("server must survive a panic after flushing")
+	}
+	if !strings.Contains(output.String(), "failure after SSE flush") {
+		t.Fatal("panic must still be logged on the server")
+	}
+}
+
 func TestRecoveryMiddlewareRealHTTP(t *testing.T) {
 	output := captureRequestLog(t)
 	partial := strings.Repeat("x", 32*1024)

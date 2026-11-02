@@ -7,7 +7,7 @@ import (
 	"runtime/debug"
 )
 
-// 仅用于当前普通、非流式 HTTP 示例。
+// 用于当前教学示例；额外支持 ResponseController 刷新，未完整代理可选接口。
 type recoveryWriter struct {
 	http.ResponseWriter
 	started bool
@@ -32,6 +32,15 @@ func (rw *recoveryWriter) Write(data []byte) (int, error) {
 	}
 
 	return rw.ResponseWriter.Write(data)
+}
+
+// 刷新也可能开始响应，先记录状态，再转发到底层。
+func (rw *recoveryWriter) FlushError() error {
+	if !rw.started {
+		rw.WriteHeader(http.StatusOK)
+	}
+
+	return http.NewResponseController(rw.ResponseWriter).Flush()
 }
 
 func recoveryMiddleware(next http.Handler) http.Handler {

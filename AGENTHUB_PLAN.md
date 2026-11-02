@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第一编：HTTP 筑基**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2**
-- 下一小节：**R.6 SSE——从完整响应转向逐段发送并刷新，处理流式Writer能力边界。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1（固定事件、逐段写出与刷新范围）**
+- 当前小节：**R.6.1 已验收；下一节 R.6.2 浏览器 EventSource 消费（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -239,3 +239,23 @@
 - 图示：[`docs/images/r5-routing-test-flow.svg`](docs/images/r5-routing-test-flow.svg)，本节路由测试目标与实现一致。
 - Git检查点：提交主题 `test(http): 共用路由注册并验证方法与路径分发`；仅本节路由提取、测试、计划、示例说明与图，.vscode/settings.json无变化；.DS_Store等无关文件保留不提交，不push，实际哈希以Git历史为准。
 - 下一阶段：R.6 SSE，从完整响应转向逐段发送并刷新，届时再处理流式Writer能力边界。
+
+### R.6 SSE（分阶段推进）
+
+#### R.6.1 SSE 逐段响应
+
+- 状态：已掌握（固定事件、逐段写出与刷新教学范围）；学习者实现事件循环、路由与FlushError，专项测试、真实逐事件接收、取消、竞态检查、静态检查及构建通过。
+- 用户可见目标：新增GET /events，固定UTF-8单行数据；正常响应立即发送首条message，随后约每秒发送第二/三条message与done，共四个事件后结束；客户端提前取消时停止等待，不追加500或done。curl -N观察逐段而非结束后一次输出。
+- 核心代码：学习者在recovery.go新增FlushError方法，先记录最终响应已开始再委托底层ResponseController.Flush；完成sse_handler.go的eventsHandler（固定列表、Ticker与Context等待、逐事件Write与Flush），newMux已注册GET /events。助手只补测试和课程记录，未代改核心逻辑。
+- 刷新边界：现包装仅嵌入ResponseWriter接口，不会自动暴露底层可选刷新方法；ResponseController识别FlushError并由包装转发。不能只Unwrap绕开started追踪；本节不实现完整Flusher/Hijacker代理或声称通用生产恢复器。
+- 数据语义：事件使用event与data字段、空行结束；固定message/done约定，done不是HTTP结束信号，Handler返回才结束本响应。EventSource自动重连与收到done后close放下一阶段。不接模型、不接用户输入，不预建通用SSE编码器。
+- 资源与并发：同请求goroutine写响应，不另起生产goroutine；Ticker每请求创建并defer Stop，首事件立即写，其余select等ticker或取消，select后再次检查ctx.Err。取消与写出存在竞争窗口，不承诺任意时间取消都绝不写；写/刷新错误仅记录并return，已开始响应不再http.Error。
+- 运行约定：Content-Type=text/event-stream，Cache-Control=no-cache；不设Content-Length/Connection/Transfer-Encoding，不加未使用代理配置。Flush只提交服务端缓冲，不保证穿过所有代理或等于客户端业务处理完成。
+- 辅助测试：新增sse_handler_test.go，按空行读取完整事件，断言四事件字节、头/状态、首条提前到达、后续等待、done后干净EOF；覆盖已取消、首条刷新后取消、真实客户端关闭、写入/刷新失败、底层刷新不支持。recovery_test.go新增无正文刷新标started、错误转发、刷新后panic中断以及真实SSE部分响应后unexpected EOF与ping回归。
+- 真实入口：保留既有8090服务，curl -N -i观察四事件分别约0.254/1.255/2.255/3.255秒到达（本次客户端实测，含启动和连接开销）；正常退出0，0.35秒客户端超时退出28且只收到首条，随后ping200、POST /events405且Allow=GET, HEAD。用户服务终端日志未读取，服务端取消原因与及时返回由随机端口真实HTTP测试核验。
+- 最小验证：示例fmt/test/vet及临时路径build通过；SSE/刷新边界定向race通过。随机端口首事件约0.00025秒到达、其余约1/2/3秒；首事件后关闭Body，Handler返回并观察context.Canceled。时间断言使用宽松窗口，不承诺精确一秒或所有网络环境的延迟。
+- 反向验证：临时Go overlay去掉Handler刷新，不修改磁盘源码；真实流测试失败退出1，发现缓冲到末尾形成固定Content-Length，证明测试能捕获漏Flush。原始源码字节核对未变，正常源码回归通过。
+- 理解与迁移验收：集中厘清Ticker只按周期通知、for range决定事件总数、函数返回才执行defer Stop；NewTimer为单次通知，AfterFunc为延迟回调，通知式便于select同时等取消。不把done当HTTP关闭命令，Write与Flush职责不同；采用现代码解释及漏刷新反向验证，不追加接口口试。
+- 图示：[`docs/images/r6-sse-write-flush.svg`](docs/images/r6-sse-write-flush.svg)，已渲染回读，与固定事件顺序和刷新调用链一致。
+- Git检查点：提交主题 `feat(http): 添加 SSE 逐段响应与刷新边界验证`；范围仅本节Handler、路由、恢复刷新方法、相关测试、计划、示例说明和图示；.vscode/settings.json无变更，.DS_Store保留不提交，不push。实际提交哈希以Git历史为准。
+- 下一阶段：R.6.2 使用浏览器EventSource消费事件并区分业务done、HTTP流结束与重连。

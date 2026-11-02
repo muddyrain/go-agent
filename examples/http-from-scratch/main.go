@@ -80,6 +80,7 @@ func newMux() *http.ServeMux {
 	mux.HandleFunc("GET /hello", helloHandler)
 	mux.HandleFunc("POST /greet", greetHandler)
 	mux.HandleFunc("GET /debug/panic", panicHandler)
+	mux.HandleFunc("GET /events", eventsHandler)
 
 	return mux
 }
