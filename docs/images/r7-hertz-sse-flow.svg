@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="445" viewBox="0 0 760 445" role="img" aria-labelledby="title desc">
+<title id="title">Hertz SSE 事件写入与生命周期</title>
+<desc id="desc">R.7.4教学示意。同一次GET /events请求，NewWriter设置SSE头并接管写入，不立即发送；循环按Ticker及ctx.Done等待，WriteEvent编码事件并刷新。首条立即，后续约一二三秒。Handler正常返回后框架结束响应；客户端断开取消等待。流式panic关闭当前连接，不重置响应返回500。</desc>
+<defs><marker id="a" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="#53768b"/></marker></defs>
+<rect width="760" height="445" rx="10" fill="#f8fafc"/>
+<g font-family="PingFang SC,Microsoft YaHei,sans-serif" fill="#203747">
+<text x="24" y="33" font-size="21" font-weight="600">事件内容与时机由循环决定，格式与刷新交给 Hertz</text>
+<text x="24" y="59" font-size="14" fill="#5b6f7b">R.7.4 示意 · 同一次 GET /events · 同步 Handler，无业务 goroutine</text>
+<rect x="24" y="82" width="290" height="65" rx="6" fill="#e3eef8" stroke="#91adc3"/>
+<text x="42" y="109" font-size="16">sse.NewWriter(c)</text>
+<text x="42" y="133" font-size="14">设置 SSE 头、接管写入；尚未发送</text>
+<path d="M169 147V174" stroke="#53768b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="24" y="182" width="290" height="83" rx="6" fill="#e3eef8" stroke="#91adc3"/>
+<text x="42" y="209" font-size="16">循环 + Ticker / ctx.Done</text>
+<text x="42" y="235" font-size="14">首条不等；后续等通知或取消</text>
+<text x="42" y="256" font-size="13">每次发送前检查 ctx.Err()</text>
+<path d="M314 223H377" stroke="#53768b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="386" y="182" width="350" height="83" rx="6" fill="#e5f3ed" stroke="#91b7a3"/>
+<text x="404" y="209" font-size="16">writer.WriteEvent(id, name, data)</text>
+<text x="404" y="235" font-size="14">编码 event / data / 空行 → 写入 → Flush</text>
+<text x="404" y="256" font-size="13">失败：记录并 return，不再写普通错误正文</text>
+<path d="M558 265V288" stroke="#53768b" stroke-width="2" marker-end="url(#a)"/>
+<rect x="386" y="296" width="350" height="63" rx="6" fill="#e5f3ed" stroke="#91b7a3"/>
+<text x="404" y="322" font-size="16">正常循环结束 → Handler 返回</text>
+<text x="404" y="346" font-size="14">Stop Ticker；框架收尾结束本次响应</text>
+<rect x="24" y="296" width="290" height="63" rx="6" fill="#fff0ec" stroke="#cca397"/>
+<text x="42" y="322" font-size="16">流式模式中发生 panic</text>
+<text x="42" y="346" font-size="14">Abort + 关闭当前连接；不重写 500</text>
+<text x="24" y="395" font-size="14">断开感知开启后（当前 netpoll）：客户端断开 → ctx 取消 → 循环停止。</text>
+<text x="24" y="423" font-size="13" fill="#5b6f7b">done 是应用事件，不自行关闭流；Flush 不保证客户端已消费。</text>
+</g></svg>

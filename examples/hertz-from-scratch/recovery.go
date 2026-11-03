@@ -9,7 +9,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app"
 )
 
-// 仅用于当前教学示例的普通缓冲响应，不处理已发送的流式响应。
+// 普通缓冲响应panic返回500；当前HTTP/1流式模式panic中断连接。
 func recoveryMiddleware(ctx context.Context, c *app.RequestContext) {
 	defer func() {
 		value := recover()
@@ -23,6 +23,14 @@ func recoveryMiddleware(ctx context.Context, c *app.RequestContext) {
 			value,
 			debug.Stack(),
 		)
+		// 已切换流式写入模式：不重置响应生成500，直接中断当前连接。
+		if c.Response.GetHijackWriter() != nil {
+			c.Abort()
+			if err := c.GetConn().Close(); err != nil {
+				log.Printf("close SSE connection after panic: %v", err)
+			}
+			return
+		}
 		c.AbortWithMsg(
 			"internal server error\n",
 			http.StatusInternalServerError,

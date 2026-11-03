@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2（各自限定教学范围）**
-- 当前小节：**R.7.3.2 已验收；下一节 R.7.4 Hertz 流式响应对照（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4（各自限定教学范围）**
+- 当前小节：**R.7.4 已验收；下一阶段 R.8 最小 /chat 独立复现（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -349,3 +349,23 @@
 - 图示：docs/images/r7-hertz-recovery-buffered.svg，已渲染回读，对应正常不改响应、故障日志与缓冲重置、中止链和外层日志返回；原稿入仓库、预览不提交。
 - Git检查点：提交主题 `feat(http): 添加 Hertz 普通响应异常恢复`；仅恢复器/故障Handler、main接线、recovery_test.go、原日志隔离测试调整、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push；实际哈希以Git历史为准。
 - 下一阶段：R.7.4 Hertz流式响应对照；不在本节提前实现流式恢复、模型、数据库或生产配置。
+
+#### R.7.4 固定 SSE 流式响应对照
+
+- 状态：已掌握（当前固定四事件、netpoll取消与HTTP/1流式中断教学范围）；用户核心实现与接线完成，发送循环、模式分支和取消通知职责已校正；测试、真实逐事件请求、断开取消、流式panic中断、静态检查与构建通过。
+- 可见目标：GET /events与标准库同样推送三条message和一条done，首条立即，随后约1/2/3秒到达；客户端提前断开时停止等待；旧ping/hello/greet/panic响应不变。不接模型，不新建浏览器页面或通用SSE封装。
+- 核心实现：学习者新建examples/hertz-from-scratch/sse_handler.go，以eventsHandler(ctx,c)保留固定四事件、Ticker/select/ctx.Err检查，采用sse.NewWriter(c)及writer.WriteEvent("",event.name,[]byte(event.data))；错误只记录并return。同一个请求中同步循环，不创建业务goroutine。main.go的New增加WithSenseClientDisconnection(true)，newServer增加GET /events。
+- 职责迁移：Hertz sse.NewWriter设置no-cache与text/event-stream; charset=utf-8并接管Response写入；构造不立即发送。WriteEvent编码event/data/空行后写并Flush，返回编码/写/刷错误，不需要重复Fprintf或c.Flush。id空字符串表示本节不发id、不做续传，data字节不必JSON；不使用普通c.String拼SSE正文。不手设Content-Length/Transfer-Encoding或调用底层Finalize。
+- 生命周期：循环控制总数，Ticker只是周期通知；首次不等，后续select同时等待tick/ctx.Done，随后统一检查Err；返回时Stop，不关闭ticker.C。done为应用事件，不关闭网络；Handler与中间件返回后Hertz对已登记writer Finalize结束响应。Writer.Close可提前完成响应，但本节交给框架统一收尾，不加defer Close，避免panic恢复前先正常结束流；WriteEvent本身已经Flush，不额外重复刷。日志的同步处理窗口含这段循环，不等客户端业务完成。
+- 断开感知：WithSenseClientDisconnection默认false，当前选项仅netpoll适用，本地Mac默认netpoll下启用后连接断开取消传入ctx；不等服务端超时预算，不用Finished代替ctx.Done，不声明所有平台/运输实现相同。Windows标准网络等跨设备行为仍需重验，不修改全局网络实现。
+- 必要恢复器改动：旧AbortWithMsg会Response.Reset并清掉已登记hijackWriter，流式panic不能靠重置生成正确500。学习者在recovery故障日志之后、普通500之前判断c.Response.GetHijackWriter()!=nil：Abort剩余链，GetConn().Close关闭当前连接并检查错误，然后return；否则保留原普通500逻辑。此判断是已切换写入模式的保守边界，不是已发送字节计数；创建writer尚未发首条时发生panic也中断，不补造500。仅当前HTTP/1教学，非HTTP/2多路复用通用方案；不重新panic http.ErrAbortHandler、不关闭整个服务。
+- 已有对照：internal/httpapi/server.go的streamChatHandler同样使用sse.NewWriter与WriteEvent，但当前包含模型/会话/额外并发；本节只提取框架写入机制，不代搬生产实现或修复历史生产分支。
+- 方案预验证：隔离真实HTTP四事件字节一致，约0.001/1.002/2.001/3.002秒到达且干净EOF；curl0.35秒超时仅首条，启用断开感知后0.65秒内观测context canceled，默认false未出现该及时取消。流式写首条后panic，客户端保留200与partial事件、IncompleteRead，未混入500正文，后续ping正常；普通panic仍500。旧恢复器对照同样无法生成有效500，源码确认Reset丢hijackWriter；本节分支明确中断并保留写入模式。所有预验证程序与日志仅工作区，隔离进程已停止，不控制用户8091服务。
+- 辅助测试：新增sse_handler_test.go，隔离ExtWriter记录精确四事件字节、四次Write/Flush、SSE头与Handler不主动Finalize；已取消零写入/首条Flush时取消仅一条、Write和Flush失败后退出且不追加普通错误或done；隔离连接核对创建Writer尚未发送/已经首条后panic均Abort并Close当前连接、保留Writer、不重写500，关闭失败才记录额外日志；POST /events405与断开感知配置。保留普通恢复器与JSON/路由全部回归测试。
+- 真实入口：保留用户8091进程，完整流四事件约0.004/1.005/2.005/3.005秒到达，SSE类型正确、正常EOF；curl0.35秒退出28仅首条，随后ping200、POST events405、普通panic500，未控制用户进程或读取用户终端。额外隔离Go overlay运行同一项目核心，四事件约0.001/1.003/2.003/3.004秒到达，chunked且无Content-Length、SSE/no-cache正确；提前断开观测context canceled；首条后panic保留200/partial+IncompleteRead，创建Writer尚未发送panic为RemoteDisconnected无响应，后续ping正常，普通panic仍500；无故障正式路由新增。
+- 反向验证：初次尝试覆盖模块缓存SSE源码被Go明确拒绝，未修改缓存；改为仅在项目Handler临时overlay包裹Writer，阻止逐事件Flush而保留Finalize，四事件全部约3.004秒才到达，证明刷新必要。项目main/Handler和缓存源码未改，隔离进程均已停止，临时材料不入仓库。
+- 检查：示例fmt、完整包test、定向Events/Recovery/Logging的race、vet、临时路径build与diff检查通过；恢复器旧注释同步为普通500/HTTP1流式中断。没有验收浏览器消费、Windows运输实现、HTTP2、代理透传或模型生命周期。
+- 理解验收：已确认切片控制总数、Ticker通知与select等待、WriteEvent编码并刷新；断开感知使连接断开关联ctx取消，代码仍要检查Err并return；false不保证完整循环，写入错误仍会结束。netpoll是通用网络底层，不是SSE专有协议；流式panic关闭当前连接不是关闭服务或直接取消上下文，Close失败才打印关闭错误。开关不能防止全部写入错误，保留取消与写入两层检查。
+- 图示：docs/images/r7-hertz-sse-flow.svg，已渲染回读，NewWriter、WriteEvent格式/刷新、循环与取消、框架收尾及流式panic中断职责对应当前实现；原稿入仓库，临时预览不提交。
+- Git检查点：提交主题 `feat(http): 添加 Hertz SSE 流式响应与取消对照`；仅sse_handler.go、sse_handler_test.go、恢复器分支、main接线、计划、示例说明与本节图示；.vscode/settings.json无变化，无关.DS_Store保留，不push。实际哈希以Git历史为准。
+- 下一步：R.8最小/chat独立复现，先建立输入→处理→响应心智模型，不直接代写生产AgentHub或接模型。

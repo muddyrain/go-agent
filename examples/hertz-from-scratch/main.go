@@ -26,6 +26,7 @@ func newServer() *server.Hertz {
 	h := server.New(
 		server.WithHostPorts("127.0.0.1:8091"),
 		server.WithHandleMethodNotAllowed(true),
+		server.WithSenseClientDisconnection(true),
 	)
 
 	h.Use(loggingMiddleware, recoveryMiddleware)
@@ -34,6 +35,7 @@ func newServer() *server.Hertz {
 	h.GET("/hello", helloHandler)
 	h.POST("/greet", greetHandler)
 	h.GET("/panic", panicHandler)
+	h.GET("/events", eventsHandler)
 
 	return h
 }
