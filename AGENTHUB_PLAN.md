@@ -17,7 +17,7 @@
 沿用一轮原则（每节固定顺序：现象 → 问题 → 调用链 → 逐点解释 → 学习者写核心代码 → 运行 → 最小测试 → 回看抽象 → 理解验收 → Git 检查点；文件与方法解释模板；新增抽象门槛；四维度进度口径），并新增二轮强化：
 
 - **HTTP 概念一律就地展开**：端点、Handler 签名、请求生命周期、状态码、JSON 约定、SSE 协议字节格式，每次出现都从"是什么、谁调用、不这样做会怎样"讲起。
-- **每节末尾设"独立复现任务"**：不提供代码，学习者凭理解完成一个变体（重建 / 改造 / 解释），作为本节真正的验收项。
+- **先带写、再做迁移练习**：每个小节先围绕当前文件逐段解释用途、调用方、写法与原因，给出标有“现在请写入”的分段代码及完整对照；学习者写核心实现。讲解与运行后再安排小变体，不用无示例的独立任务替代授课。
 - **语法补丁课聚焦一轮出现过但未讲透的 Go 概念**：接口与错误链、并发原语、泛型与闭包。
 
 ## 4. 课程路线（三编，按课号顺序推进；语法补丁课可按需要提前插入）
@@ -91,7 +91,7 @@
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
 - 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4（各自限定教学范围）**
-- 当前小节：**R.7.4 已验收；下一阶段 R.8 最小 /chat 独立复现（未开始）。**
+- 当前小节：**R.8.1 输入校验与规则回复已验收；下一阶段 R.8.2（未开始，按下一可见目标展开）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -369,3 +369,19 @@
 - 图示：docs/images/r7-hertz-sse-flow.svg，已渲染回读，NewWriter、WriteEvent格式/刷新、循环与取消、框架收尾及流式panic中断职责对应当前实现；原稿入仓库，临时预览不提交。
 - Git检查点：提交主题 `feat(http): 添加 Hertz SSE 流式响应与取消对照`；仅sse_handler.go、sse_handler_test.go、恢复器分支、main接线、计划、示例说明与本节图示；.vscode/settings.json无变化，无关.DS_Store保留，不push。实际哈希以Git历史为准。
 - 下一步：R.8最小/chat独立复现，先建立输入→处理→响应心智模型，不直接代写生产AgentHub或接模型。
+
+### R.8 最小 /chat 独立复现（分阶段）
+
+#### R.8.1 输入校验与普通响应
+
+- 状态：已掌握（当前输入校验与普通规则回复教学范围）；学习者按逐段讲解保存结构体、Handler与POST注册，处理链用途已说明；完整包测试、静态检查、构建与真实请求验证通过。本节为规则回复，不代表模型/Agent或完整R.8会话能力已完成。
+- 可见目标：当前Hertz教学服务新增POST /chat，接收JSON message，去两端空白后返回仅answer一个小写JSON键，值为 `收到：` 加处理后的message。其余路由及中间件不变，无网络模型、数据库、会话、并发或配置输入。
+- 文件与职责：学习者新建examples/hertz-from-scratch/chat_handler.go，包含chatRequest(Message string、json:message)、chatResponse(Answer string、json:answer)和chatHandler(_ context.Context,c *app.RequestContext)；main.go的newServer只新增POST /chat注册。不照抄internal/httpapi、不创建新模块/目录，不将教学功能移入生产代码。
+- 本节契约：依次mime.ParseMediaType检查Content-Type为application/json（含合法参数）否则415；c.Request.Body取得字节后>4096返回413；json.Unmarshal非法或字段类型不匹配400；TrimSpace(message)后空值400；正常c.JSON200。错误正文依次为Content-Type must be application/json换行/request body too large换行/invalid JSON request换行/message is required换行，错误纯文本，成功JSON。沿用当前解析默认行为，不严格拒绝未知/重复键。
+- 教学与迁移：先按当前文件连续讲解结构体、Content-Type、已接收大小、Unmarshal、业务空值与响应构造，提供每段“现在请写入”及最终完整文件与路由位置；用户编写核心。理解并运行后再做小变体，不把已学过API等同于能独立拼出函数，也不以背API名称为验收。
+- 辅助测试：新增chat_handler_test.go，七种成功输入覆盖普通、去两端空白、保留中间空格、转义、4096字节、未知/重复字段默认行为；反解map检查恰含小写answer一个键、正文为收到前缀加处理后的message；十四种错误覆盖Content-Type、超限及顺序、非法/类型不符/尾随JSON、空缺/null message，错误仍精确纯文本；GET /chat405。保留其余路由、JSON、中间件与SSE测试。
+- 验证：示例fmt、完整包test、vet与临时路径build通过；真实8091七组chat请求分别核对200规则回复、空白400、类型400、非法JSON400、媒体类型415、4096字节200、4097字节413，另GET chat405、ping/hello200回归；保留用户进程，不读取终端日志。完整原始测试和响应证据在工作区，临时二进制不提交；无模型或外部服务请求。
+- 校验封装边界：Content-Type、共同大小策略与JSON解码可在规则和错误契约一致时复用辅助函数或适当路由组中间件；框架请求大小限制是接收层防护，不等价于Handler内接收后的业务len检查。name/message等字段规则留在各自Handler或类型校验函数；绑定API可减少代码，但须核对解析语义与错误映射，不静默替换当前Unmarshal行为。当前已出现实际重复，可作为后续按需教学对象，本节未创建封装或重构用户核心。
+- 理解验收：已说明当前chat读取、前置校验、解析、message业务检查和answer响应链；授课采用先分段写入、再完整对照，不再用无示例的独立任务替代教学。后续小变体仍在讲解后安排，不把本节测试通过等同于完整Agent能力。
+- Git检查点：提交主题 `feat(http): 添加最小 chat 输入校验与规则回复`；仅本节chat_handler.go、chat_handler_test.go、main注册、计划和示例说明；教学方式调整与本节带写一致。.vscode/settings.json无变化，无关.DS_Store保留，不push，实际哈希以Git历史为准。
+- 下一阶段：R.8.2引入处理函数边界，在出现真实处理调用/失败需求时展开；会话与模型仍按后续小节，不本轮提前布置。
