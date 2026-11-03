@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1（各自限定教学范围）**
-- 当前小节：**R.7.3.1 已验收；下一节 R.7.3.2 Hertz 异常恢复对照（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2（各自限定教学范围）**
+- 当前小节：**R.7.3.2 已验收；下一节 R.7.4 Hertz 流式响应对照（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -330,3 +330,22 @@
 - 图示：docs/images/r7-hertz-middleware-next.svg，已渲染回读，登记与请求执行分离、Next同步调用和defer返回顺序对应当前实现；原稿入仓库，预览仅留工作区。
 - Git检查点：提交主题 `feat(http): 添加 Hertz 请求日志中间件对照`；范围仅本节middleware.go、middleware_test.go、main.go接线、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push；实际哈希以Git历史为准。
 - 下一阶段：R.7.3.2异常恢复对照；本节不添加recovery、panic路由、status包装器、模型或流式实现。
+
+#### R.7.3.2 普通响应异常恢复对照
+
+- 状态：已掌握（当前普通缓冲响应、同栈panic教学范围）；学习者核心实现与接线正确，recover用途已说明，恢复器测试、真实请求、race、静态检查与构建通过。
+- 可见目标：GET /panic 固定触发demo panic，经应用恢复器返回500与internal server error换行（text/plain; charset=utf-8）；服务端记录method/path/value/stack，随后GET /ping仍200。固定故障端点仅本地教学，不引入真实业务故障参数。
+- 核心代码：学习者新增examples/hertz-from-scratch/recovery.go，含直接函数recoveryMiddleware(ctx,c)与固定panicHandler；newServer保留server.New，Use按loggingMiddleware、recoveryMiddleware顺序，全部路由前登记，新增GET /panic；不改标准库、生产代码、go.mod或添加第二套默认恢复。
+- 恢复流程：defer内直接recover；nil不改正常响应；非nil记录服务端日志和debug.Stack；c.AbortWithMsg重置尚未发送的普通Response头/正文，设置500与通用正文并Abort剩余链；再SetContentType显式UTF-8纯文本；c.Next(ctx)同步包住后续链。恢复后当前中间件返回，不回到业务panic位置，也不继续执行原Next后的语句。
+- 边界：仅普通缓冲响应、同一调用栈panic。c.String先构造普通Response，不等标准库ResponseWriter.WriteHeader已经确定网络响应；缓冲成功正文可清掉改500，不搬recoveryWriter.started或http.ErrAbortHandler（后者不是Hertz中断协议）。流式/接管/已经发送、独立goroutine、os.Exit、fatal或业务回滚均不在本节保证内。恢复器日志自身panic也不由同一defer兜底。
+- Abort语义：停止尚未执行的Handler，不是取消context或关闭服务；AbortWithMsg会清掉整个旧Response头/正文，再构造500，参数顺序msg/code，与String的code/format不同；SetContentType在重置之后。单独String不能替代清理和Abort。
+- 顺序：logging外层→recovery→业务；业务panic先被recovery处理，再回外层日志退出；当前recovery只覆盖其后的链，不保证覆盖外层日志自身错误。Use只登记函数，不调用业务；保留New以显示恢复来源。可选现成recovery.Recovery或server.Default，但不静默替换当前错误正文/头清理教学契约。
+- 语法：value:=recover返回any，不仅error；if value==nil是普通请求分支；debug.Stack返回当前goroutine堆栈[]byte；日志%s方法/堆栈、%q路径、%v任意panic值，只在服务端打印，不写回客户端。panicHandler两个参数用_表示保留签名但不使用。
+- 预验证：临时程序正常ping不变、panic500、缓冲后panic500且旧Content-Encoding/X-Stale清掉、剩余Handler不执行、后续ping正常；无恢复实例panic原值传到测试调用方。随机端口真实curl两种故障500与后续ping200，服务端两条panic日志，隔离进程已停止；这些是教学方案预验证，非最新用户代码验收。
+- 辅助测试：原TestLoggingMiddlewareDoesNotRecoverPanic保持server.New仅Use(loggingMiddleware)隔离日志职责；新增recovery_test.go，核对正常201正文/头不变；string/error/数字panic均返回精确通用500，服务端一次故障日志含stack并先于外层请求日志，不记录query；panic后的业务语句不恢复、尚未执行的Handler不运行；普通缓冲成功正文和旧Content-Encoding/Content-Length/X-Stale清理；注册GET /panic500、后续ping200、POST /panic405。故障分支均为隔离测试实例，不为正式教学路由添加额外输入。
+- 真实验收：既有8091的GET /panic、随后ping、缺参hello、POST /panic、未知路径依次500/200/400/405/404且正文正确，未控制用户进程或读取其终端日志；另用Go overlay仅在隔离实例改为随机端口、添加缓冲后panic测试路由，同一核心实现真实返回两次干净500与后续ping200；服务端两条panic日志含stack、三条请求日志，故障日志先于相应请求日志，query未入日志；隔离进程已停止，项目入口字节未变。
+- 验证：示例fmt、完整包test、定向恢复/日志race、vet、临时路径build与diff检查通过；反向overlay把AbortWithMsg替换为只AbortWithStatus和SetBodyString（不清旧头），缓冲清理测试发现stale headers而失败退出1；项目恢复器字节未变，原码重新完整包test通过。不将此验证扩展为已发送流式响应/其他goroutine/副作用回滚保证。
+- 理解范围：已说明recover接住panic；当前代码及多类型测试进一步区分panic值不一定是error，正常recover为nil，恢复后结束失败调用而非回到panic行。保留普通缓冲限定，不提前标记流式异常生命周期已掌握。
+- 图示：docs/images/r7-hertz-recovery-buffered.svg，已渲染回读，对应正常不改响应、故障日志与缓冲重置、中止链和外层日志返回；原稿入仓库、预览不提交。
+- Git检查点：提交主题 `feat(http): 添加 Hertz 普通响应异常恢复`；仅恢复器/故障Handler、main接线、recovery_test.go、原日志隔离测试调整、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push；实际哈希以Git历史为准。
+- 下一阶段：R.7.4 Hertz流式响应对照；不在本节提前实现流式恢复、模型、数据库或生产配置。

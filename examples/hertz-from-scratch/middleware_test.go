@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/common/ut"
 )
 
@@ -107,7 +108,9 @@ func TestLoggingMiddlewareForwardsAndTimesEachRequest(t *testing.T) {
 
 func TestLoggingMiddlewareDoesNotRecoverPanic(t *testing.T) {
 	output := captureHertzRequestLog(t)
-	h := newServer()
+	// 隔离日志职责：即使 newServer 后续安装 recovery，这里仍只测 logging。
+	h := server.New()
+	h.Use(loggingMiddleware)
 	sentinel := &struct{ label string }{"test panic"}
 	h.GET("/test-panic", func(_ context.Context, _ *app.RequestContext) { panic(sentinel) })
 	var got any

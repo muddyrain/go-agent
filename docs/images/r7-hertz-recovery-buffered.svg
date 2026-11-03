@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="440" viewBox="0 0 760 440" role="img" aria-labelledby="title desc">
+<title id="title">Hertz 普通缓冲响应的异常恢复</title>
+<desc id="desc">R.7.3.2示意。日志包住恢复器，恢复器包住业务处理。正常请求不修改响应。业务panic沿同一调用栈到恢复器defer，recover拿到值，记录服务端堆栈，AbortWithMsg清掉尚未发送的普通Response并设置500正文和中止后续链，外层日志退出。已发送流式响应不在该示例保证范围。</desc>
+<defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="#53768b"/></marker></defs>
+<rect width="760" height="440" rx="10" fill="#f8fafc"/>
+<g font-family="PingFang SC,Microsoft YaHei,sans-serif" fill="#203747">
+<text x="24" y="34" font-size="21" font-weight="600">异常恢复：结束失败处理，构造干净的 500</text>
+<text x="24" y="60" font-size="14" fill="#5b6f7b">R.7.3.2 示意 · 仅普通缓冲响应、同一调用栈 panic</text>
+<rect x="24" y="80" width="712" height="42" rx="5" fill="#e3eef8"/>
+<text x="40" y="107" font-size="15">调用嵌套：logging → recovery 的 Next → 业务 Handler</text>
+<rect x="24" y="148" width="262" height="80" rx="6" fill="#e3eef8" stroke="#91adc3"/>
+<text x="42" y="177" font-size="16">业务函数返回 / 发生 panic</text>
+<text x="42" y="205" font-size="14">恢复器退出时执行 defer</text>
+<path d="M286 187H325" stroke="#53768b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="332" y="148" width="180" height="80" rx="6" fill="#fff8e9" stroke="#c8b17c"/>
+<text x="350" y="178" font-size="16">value := recover()</text>
+<text x="350" y="205" font-size="14">有值？还是 nil？</text>
+<path d="M512 174H551" stroke="#53768b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="558" y="148" width="178" height="80" rx="6" fill="#e5f3ed" stroke="#91b7a3"/>
+<text x="574" y="178" font-size="16">nil：正常请求</text>
+<text x="574" y="205" font-size="14">return，不改响应</text>
+<path d="M422 228V252" stroke="#53768b" stroke-width="2" marker-end="url(#arrow)"/>
+<rect x="332" y="260" width="404" height="106" rx="6" fill="#fff0ec" stroke="#cca397"/>
+<text x="350" y="287" font-size="16">非 nil：记录服务端日志 / stack</text>
+<text x="350" y="314" font-size="15">AbortWithMsg → 清旧头与正文 → 500</text>
+<text x="350" y="342" font-size="14">停止剩余链；不回到业务 panic 位置</text>
+<rect x="24" y="260" width="262" height="106" rx="6" fill="#edf1f4" stroke="#a8bac5"/>
+<text x="42" y="289" font-size="16">然后回到外层 logging</text>
+<text x="42" y="316" font-size="14">打印请求耗时，当前请求结束</text>
+<text x="42" y="344" font-size="14">后续 /ping 可继续处理</text>
+<path d="M332 322H293" stroke="#53768b" stroke-width="2" marker-end="url(#arrow)"/>
+<text x="24" y="399" font-size="14">c.String 构造的普通正文尚可替换；不是把已发送的 200 改成 500。</text>
+<text x="24" y="424" font-size="13" fill="#5b6f7b">不保证流式已发送、另一个 goroutine、进程退出或业务回滚。</text>
+</g></svg>
