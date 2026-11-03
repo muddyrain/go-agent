@@ -89,6 +89,52 @@ func TestChatHandlerValidation(t *testing.T) {
 	}
 }
 
+func TestChatHandlerCommands(t *testing.T) {
+	h := newServer()
+	for _, tt := range []struct {
+		name, message string
+		status        int
+		answer, body  string
+	}{
+		{"normal_unchanged", "  Go  ", 200, "收到：Go", ""},
+		{"upper", "/upper Go http", 200, "GO HTTP", ""},
+		{"upper_trim", "  /upper   你好 Go  ", 200, "你好 GO", ""},
+		{"bare_upper", "/upper", 400, "", "text is required after /upper\n"},
+		{"blank_upper", "/upper   ", 400, "", "text is required after /upper\n"},
+		{"uppercase_is_not_command", "/uppercase go", 200, "收到：/uppercase go", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			body, err := json.Marshal(map[string]string{"message": tt.message})
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := ut.PerformRequest(h.Engine, "POST", "/chat", &ut.Body{
+				Body: strings.NewReader(string(body)), Len: len(body),
+			}, ut.Header{Key: "Content-Type", Value: "application/json"}).Result()
+			if r.StatusCode() != tt.status {
+				t.Fatalf("status=%d body=%q want=%d", r.StatusCode(), r.Body(), tt.status)
+			}
+			if tt.status == 400 {
+				if string(r.Body()) != tt.body || string(r.Header.Peek("Content-Type")) != "text/plain; charset=utf-8" {
+					t.Fatalf("unexpected error body=%q type=%q", r.Body(), r.Header.Peek("Content-Type"))
+				}
+				return
+			}
+			mediaType, _, err := mime.ParseMediaType(string(r.Header.Peek("Content-Type")))
+			if err != nil || mediaType != "application/json" {
+				t.Fatalf("type=%q error=%v", r.Header.Peek("Content-Type"), err)
+			}
+			var got map[string]string
+			if err := json.Unmarshal(r.Body(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || got["answer"] != tt.answer {
+				t.Fatalf("response=%v want answer=%q", got, tt.answer)
+			}
+		})
+	}
+}
+
 func TestChatRouteMethod(t *testing.T) {
 	r := ut.PerformRequest(newServer().Engine, "GET", "/chat", nil)
 	if r.Code != 405 || r.Body.String() != "Method Not Allowed" {

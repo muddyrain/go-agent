@@ -48,8 +48,16 @@ func chatHandler(_ context.Context, c *app.RequestContext) {
 		c.String(http.StatusBadRequest, "message is required\n")
 		return
 	}
+
+	answer, err := replyToMessage(message)
+	if err != nil {
+		// 当前处理函数只返回可公开的指令输入错误，不用于映射未来内部故障。
+		c.String(http.StatusBadRequest, "%s\n", err.Error())
+		return
+	}
+
 	response := chatResponse{
-		Answer: "收到：" + message,
+		Answer: answer,
 	}
 
 	c.JSON(http.StatusOK, response)

@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4（各自限定教学范围）**
-- 当前小节：**R.8.1 输入校验与规则回复已验收；下一阶段 R.8.2（未开始，按下一可见目标展开）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2（各自限定教学范围）**
+- 当前小节：**R.8.2 消息处理函数与错误返回已验收；下一小节 R.8.3 最小会话状态（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -385,3 +385,19 @@
 - 理解验收：已说明当前chat读取、前置校验、解析、message业务检查和answer响应链；授课采用先分段写入、再完整对照，不再用无示例的独立任务替代教学。后续小变体仍在讲解后安排，不把本节测试通过等同于完整Agent能力。
 - Git检查点：提交主题 `feat(http): 添加最小 chat 输入校验与规则回复`；仅本节chat_handler.go、chat_handler_test.go、main注册、计划和示例说明；教学方式调整与本节带写一致。.vscode/settings.json无变化，无关.DS_Store保留，不push，实际哈希以Git历史为准。
 - 下一阶段：R.8.2引入处理函数边界，在出现真实处理调用/失败需求时展开；会话与模型仍按后续小节，不本轮提前布置。
+
+#### R.8.2 消息处理函数与错误返回
+
+- 状态：已掌握（当前普通函数、固定指令与预期输入错误教学范围）；学习者保存chat_logic.go并接入Handler，已说明指令/普通消息分支并确认结果与错误分工。用户源码完整包测试、race、vet、build与真实8091验收通过；不是模型或完整会话能力验收。
+- 用户可见目标：之前POST /chat只回声；本节新增message中的小写 `/upper` 指令，后跟ASCII空格和文本时返回大写文本，仅指令或空白文本返回400；普通消息仍回复 `收到：` 加原消息，JSON请求/响应字段与其余端点不变。指令只是规则演示，不是模型选择工具或Agent推理。
+- 本节只解决：新增实际消息处理分支和输入失败路径，用一个普通函数说明输入→处理→结果/错误→HTTP映射。处理函数不接收Hertz上下文、不返回HTTP状态码，不引入interface、依赖注入、服务层/新包、会话、模型或公共JSON封装。
+- 调用链：Hertz路由→chatHandler（Content-Type/正文大小/JSON/非空message检查）→replyToMessage（同步文本处理，成功返回string与nil，失败返回空string与error）→Handler将已知指令输入错误映射400或编码answer为200；普通panic仍归原恢复器。
+- 学习者核心代码：新建examples/hertz-from-scratch/chat_logic.go，package main，导入errors/strings，逐段完成replyToMessage(message string) (string, error)；其入参由Handler保证已去两端空白且非空。chat_handler.go保留前置检查，在message非空检查后调用处理函数，error非nil时使用固定格式 `%s\n` 和err.Error返回400并return，成功Answer使用answer。main.go和其他Handler不改；同package无需显式导入本地函数。
+- 指令边界：message等于 `/upper` 或以 `/upper ` 开头才进入分支；TrimPrefix移除一个指令前缀，TrimSpace处理文本，空文本errors.New("text is required after /upper")，成功strings.ToUpper；非命令回复收到前缀。`/uppercase go`、`/UPPER go`、`/upper` 后直接接Tab不是指令。空白规则与请求空白预检的关系需解释，避免误把HasPrefix("/upper")作为完整命令边界。
+- 关键Go语法：普通函数参数/多返回值、一一接收、nil表示error不存在、return只结束当前函数、调用方显式检查错误、error.Error取说明；包与文件不同，同目录package main共享包内函数，不按文件名导入。errors.New生成错误值不panic，缺少指令文本是预期输入错误，不交恢复中间件；固定错误文本无需fmt.Errorf，未来包装内部失败才按错误分类和日志边界展开，不能把所有error永远400或原文公开。
+- 教学形式：先分段讲文件、用途、调用方、原因、替代影响，给每段“现在请写入”；最后提供chat_logic.go完整对照与chatHandler完整对照。本节一次讲完整，用户编写核心，助手随后补项目单测；不以孤立TODO替代教学。
+- 最小验收：新增chat_logic_test.go直接调用replyToMessage，九场景覆盖普通、内部空格、英文/中文指令、裸指令/空白参数、/uppercase前缀、大小写和Tab边界；chat_handler_test.go新增六场景覆盖指令路由、精确answer键/值、400纯文本及旧响应。最小测试与完整Hertz包test、Chat/Reply race、vet、临时路径build通过，gofmt -l无输出；真实8091九请求核对普通、upper、中文trim、裸/blank指令、前缀、405、ping和greet。用户核心源码哈希前后相同，未控制用户服务进程；暂存前检查与可读格式验证按检查点执行。工作区只overlay项目chat_logic的故意错误副本，被TestReplyToMessage/different_prefix发现/uppercase误变CASE GO，原码未改。
+- 教材预验证：工作区overlay教材副本通过完整Hertz包test、vet与build，处理函数九场景及指令路由六场景，隔离18091真实HTTP十二场景通过；故意去掉命令边界的副本被测试识别（/uppercase误变CASE GO），项目main/chat源码哈希未改变，隔离进程已停止。此证据仅证明教材可运行，不替代用户保存后的验收；工作区脚本、二进制、日志均不提交。
+- 理解验收题：谁调用replyToMessage，为什么它不需要c；两个返回值分别是什么；处理函数return后为什么Handler还能继续；为什么缺少文本返回error而不是panic，为什么当前400映射不能直接套到未来模型故障。
+- Git检查点：提交主题 `feat(http): 分离 chat 消息处理并添加 upper 指令`；仅chat_logic.go、chat_logic_test.go、chat_handler.go、chat_handler_test.go、计划与示例说明。.vscode/settings.json无变化，不强造diff；无关.DS_Store保留，不push、不提交预验证材料，实际哈希以Git历史为准。
+- 下一步：先验收本节，再按下一用户可见目标决定最小会话输入/状态教学；公共JSON封装仅在明确消除重复且符合下一目标时展开，不预建多层框架。
