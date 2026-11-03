@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1（各自限定教学范围）**
-- 当前小节：**R.7.1 已验收；下一节 R.7.2 Hertz JSON 请求与响应对照。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2（各自限定教学范围）**
+- 当前小节：**R.7.2 已验收；下一节 R.7.3 Hertz 中间件对照（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -295,3 +295,20 @@
 - 理解迁移：已集中校正GET注册而非函数本体执行方法限制；false不会把POST转成GET，true只识别同路径其他方法并返回405；关闭405识别不等于鉴权或隐藏所有访问。c.Query仍需业务空值判断，c.String负责普通响应构造。采用当前代码解释与隔离对照验收，不追加/chat或模型任务。
 - 图示：docs/images/r7-hertz-handler-comparison.svg，标准库与Hertz对应职责及GET/HEAD默认差异，保存后渲染核对。
 - 下一阶段：R.7.2对照JSON请求/响应，再按实际需要进入框架中间件与流式能力；一次只带写当前阶段。
+
+#### R.7.2 JSON 请求与响应对照
+
+- 状态：已掌握（当前默认非流式JSON请求与固定字符串响应范围）；学习者实现与接线完成，前置校验职责已确认，JSON契约/边界测试、真实入口、静态检查与构建通过。
+- 用户可见目标：Hertz教学示例新增POST /greet，接收name并返回message/name两个小写JSON键；缺/错Content-Type415、4KiB以上已接收正文413、非法JSON/类型不符/去空白后空name400，旧ping/hello不变。
+- 核心代码：学习者新增json_handler.go（greetRequest/greetResponse/greetHandler），main.go的newServer只增加h.POST('/greet', greetHandler)；不改标准库示例、生产代码、go.mod或全局请求限制。
+- 当前数据流：string(c.GetHeader('Content-Type'))交mime.ParseMediaType；c.Request.Body()取得当前默认非流式模式下框架已接收的[]byte；len检查后json.Unmarshal到请求结构体；TrimSpace业务校验；构造响应结构体再c.JSON(200,response)。成功JSON、错误c.String纯文本，沿用R.2主要契约。
+- 大小边界：len(body)>4096是业务接收上限，不是流读取过程限内存，不能与MaxBytesReader等价；本机Hertz默认框架正文上限4MiB，超过框架限制可能在Handler前拒绝，本节不改变全局限制或实现流式请求。Body()不返回error，流式或失败读取场景可改BodyE/Body，但本节不声称覆盖所有读取失败。
+- API选择：保留标准库Unmarshal以便直接对照完整JSON解析；可行替代c.BindJSON(&req)封装绑定，但当前默认单次Decode对尾随JSON行为不等价，本节不静默换解析语义。c.JSON接收Go对象，负责编码/Content-Type/响应数据，没有error返回；当前固定字符串响应无法触发正常请求编码失败，编码失败会经Render panic，不声称自动返回500，recovery下一阶段处理。
+- 语法：导出字段与json标签；&req允许解码写入调用方变量，响应传值即可；[]byte转string只是头部类型转换，不能把Marshal后的[]byte再传c.JSON（会再次编码）。Query读取URL与Unmarshal读取JSON Body不同。
+- 辅助测试：新增json_handler_test.go，共用newServer验证七种成功JSON（普通/去空白/引号反斜杠换行/中文/4096字节/未知字段/重复字段），重新解析map断言恰含小写message/name两键；十六种错误场景覆盖Content-Type、4097字节、校验顺序、非法/类型不符/尾随JSON、空body和缺失/空白/null name；另验证GET /greet405。保留全部R.7.1路由与方法配置测试。
+- 真实入口：保留既有8091进程；curl九组greet请求验证成功、去空白、转义、非法JSON、错误字段类型、空白name、415及4096/4097字节边界，返回200/400/415/413符合契约；另GET /greet405、ping200、hello200。未读取用户终端日志，未停止或替换用户进程。
+- 验证：示例fmt、完整包test、vet、临时路径build与diff检查通过；临时Go overlay仅将响应json标签改为大写Name，精确键名断言失败退出1，原始源码字节未变；正常源码重新PASS。当前不覆盖框架上限之前的读取失败、生产流式请求或无法由固定字符串正常触发的编码500。
+- 理解验收：已确认成功响应前依次检查Content-Type、已接收正文字节数、JSON语法与字段类型、TrimSpace后的name；JSON解析成功不保证业务字段有效，JSON Body字段不是URL查询参数；len大小检查不是读取过程中限内存，成功响应由c.JSON编码。采用实现说明与反向契约验证，不追加接口口试。
+- 图示：docs/images/r7-hertz-json-flow.svg，已渲染回读，顺序与职责对应当前实现。
+- Git检查点：提交主题 `feat(http): 添加 Hertz JSON 请求与响应校验`；仅本节Handler、路由、JSON测试、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push。实际哈希以Git历史为准。
+- 下一阶段：R.7.3框架中间件对照，本节不新增recovery、日志状态、重试或模型能力。

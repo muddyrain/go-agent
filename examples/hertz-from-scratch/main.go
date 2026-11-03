@@ -30,6 +30,7 @@ func newServer() *server.Hertz {
 
 	h.GET("/ping", pingHandler)
 	h.GET("/hello", helloHandler)
+	h.POST("/greet", greetHandler)
 
 	return h
 }

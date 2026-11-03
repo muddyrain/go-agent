@@ -12,7 +12,7 @@
 | `eino-direct` | B.1 | 观察 Eino Chain、Compile、Runnable 和 ChatModel 的最小直接回答 | `go run ./examples/eino-direct` |
 | `eino-tool` | B.2 | 观察 Eino Tool、ToolsNode 和 ReAct Agent 的同步工具调用闭环 | `go run ./examples/eino-tool` |
 | `http-from-scratch` | 二轮 R.1—R.6 | 标准库 HTTP 教学练习；纯文本、JSON、全局日志、请求级 panic 恢复、R.4 请求取消/处理时限、R.5 表驱动/路由测试已验收；R.6.1 `/events` 固定四事件逐段刷新已验收，包装器补齐 ResponseController 刷新但未完整代理可选接口；R.6.2 `/events/demo` 浏览器逐事件显示、done关闭和手动停止已验收（从项目根启动） | `go run ./examples/http-from-scratch` |
-| `hertz-from-scratch` | 二轮 R.7 | Hertz 对照练习；R.7.1 两条GET路由、查询参数、纯文本响应与404/405分发已验收；监听127.0.0.1:8091，保留标准库示例作对照 | `go run ./examples/hertz-from-scratch` |
+| `hertz-from-scratch` | 二轮 R.7 | Hertz 对照练习；R.7.1 两条GET路由、查询参数、纯文本响应与404/405分发已验收；R.7.2 POST /greet 的JSON请求/响应及前置校验已验收（大小检查在正文接收后）；监听127.0.0.1:8091，保留标准库示例作对照 | `go run ./examples/hertz-from-scratch` |
 
 ## 维护边界
 
