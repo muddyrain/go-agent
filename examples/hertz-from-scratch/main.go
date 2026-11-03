@@ -28,6 +28,8 @@ func newServer() *server.Hertz {
 		server.WithHandleMethodNotAllowed(true),
 	)
 
+	h.Use(loggingMiddleware)
+
 	h.GET("/ping", pingHandler)
 	h.GET("/hello", helloHandler)
 	h.POST("/greet", greetHandler)

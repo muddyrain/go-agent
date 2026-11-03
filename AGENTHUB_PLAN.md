@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2（各自限定教学范围）**
-- 当前小节：**R.7.2 已验收；下一节 R.7.3 Hertz 中间件对照（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1（各自限定教学范围）**
+- 当前小节：**R.7.3.1 已验收；下一节 R.7.3.2 Hertz 异常恢复对照（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -312,3 +312,21 @@
 - 图示：docs/images/r7-hertz-json-flow.svg，已渲染回读，顺序与职责对应当前实现。
 - Git检查点：提交主题 `feat(http): 添加 Hertz JSON 请求与响应校验`；仅本节Handler、路由、JSON测试、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push。实际哈希以Git历史为准。
 - 下一阶段：R.7.3框架中间件对照，本节不新增recovery、日志状态、重试或模型能力。
+
+#### R.7.3.1 请求日志中间件对照
+
+- 状态：已掌握（当前同步处理链与请求日志教学范围）；用户核心实现与Use接线正确，计时与defer日志用途已说明，日志测试、真实入口、race、静态检查与构建通过。
+- 可见目标：改动前只有框架启动/路由登记日志，没有自定义每请求耗时；完成后ping、hello、greet和当前404/405请求均打印一条method/path/duration，HTTP响应保持不变。
+- 核心改动：学习者新增examples/hertz-from-scratch/middleware.go，直接定义loggingMiddleware(ctx context.Context,c *app.RequestContext)，不接收next、不返回Handler；main.go的newServer在server.New之后、全部路由注册之前h.Use(loggingMiddleware)。没有配置输入或第二个调用方，不新建返回闭包的工厂。
+- 当前链：路由器先匹配并选出处理链；logging记录每请求start并登记defer；c.Next(ctx)在同一调用栈同步执行后续链；后续返回后中间件退出，defer计算time.Since(start)并log.Printf。相比标准库next.ServeHTTP，把后续处理链的保存/推进交给Hertz。
+- 关键边界：Next不是网络请求、后台任务或取消通知；该版本框架外层本身也循环推进链，删Next/只return不会可靠地终止后续Handler，而会让defer日志先执行；真正中止链用Abort并return（只讲区别，不实现鉴权）。路由在注册时合并当时的中间件，临时实例实际验证Use放在GET后不能追溯覆盖已注册的GET；当前先Use再注册。
+- 日志：c.Method/c.Path返回[]byte，当前fmt的%s/%q可直接格式化，不必转string；Path不包含query，不记录body/header或个人信息。耗时为本节同步处理链窗口，不保证客户端收到或覆盖网络读写/流式后台工作；defer能在当前栈panic展开时打印，但不是recover，不承诺500。
+- 替代：可直接在Next之后log.Printf，正常返回可用但panic展开会跳过；选defer闭包将时间计算延迟到退出。可定义loggingMiddleware() app.HandlerFunc再返回闭包，但本节没有配置或共享依赖需捕获，使用直接函数及h.Use(loggingMiddleware)。
+- 临时预验证：200/404/405各一条日志、不含query，响应状态不变；Next存在时顺序before→Handler→after→defer，删除Next时before→after→defer→Handler；Use晚于已注册GET时该GET无日志。均在助手工作区独立程序运行，非用户实现验收，无项目依赖变更。
+- 辅助测试：新增middleware_test.go，临时接管标准log并在Cleanup恢复，不并行；共用newServer七种请求核对method/path/duration、一请求一条且不含query/body；隔离延迟Handler连续两次各等待25ms，断言日志在下游返回后、耗时包含等待、请求体/响应头/状态/正文不变、下游各执行一次；仅测试调用方捕获原值panic，确认defer仍打印但logging不recover。没有给服务注册故障路由或添加恢复器。
+- 真实验证：既有8091服务六组curl回归200/200/400/405/404/200，未控制用户进程或读取其终端日志；额外Go overlay只把同一main入口监听改为随机端口，真实curl六请求逐项核对响应和独立进程日志，各一条且无query/body。隔离服务已停止，磁盘入口源码字节未变，未改项目端口或依赖。
+- 检查：示例fmt、完整包test、定向日志race、vet、临时路径build和diff检查通过；反向Go overlay仅移除Next并保留ctx使用，原测试发现日志早于Handler且耗时未覆盖25ms而失败退出1；磁盘中间件未变，原码再运行完整包test通过。
+- 理解范围：已说明每请求先保存当前时间，defer退出时打印方法、路径和耗时；duration是经过时间不是当前时间戳。实现中Next同步包住后续链，通过日志顺序和耗时反向测试核验，不将本节日志用途理解等同于已掌握recovery或异步/流式生命周期。
+- 图示：docs/images/r7-hertz-middleware-next.svg，已渲染回读，登记与请求执行分离、Next同步调用和defer返回顺序对应当前实现；原稿入仓库，预览仅留工作区。
+- Git检查点：提交主题 `feat(http): 添加 Hertz 请求日志中间件对照`；范围仅本节middleware.go、middleware_test.go、main.go接线、计划、示例说明与图示；.vscode/settings.json无变化，无关.DS_Store保留，不push；实际哈希以Git历史为准。
+- 下一阶段：R.7.3.2异常恢复对照；本节不添加recovery、panic路由、status包装器、模型或流式实现。
