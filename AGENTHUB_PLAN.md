@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3（各自限定教学范围）**
-- 当前小节：**R.8.3 最小会话计数已验收；下一节按最小历史或流式聊天的可见目标展开（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1（各自限定教学范围）**
+- 当前小节：**R.9.1 POST /chat/stream 最小流式聊天已验收；下一节按真实流输入的可见目标展开（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -417,3 +417,22 @@
 - 理解验收：已确认每次请求重新创建store会因map重置而始终返回turn=1；服务可并发处理请求，即使业务未主动启动goroutine，共享计数仍需同一把Mutex保护读取、加一、写回与取结果，防止数据竞争和丢失更新。锁保证计数操作完整，不是session_id唯一性或请求到达顺序；无ID保持仅answer，错误请求不计数。
 - Git检查点：提交主题 `feat(http): 添加进程内会话计数与并发保护`；仅本节session_store.go、session_store_test.go、chat_handler.go、chat_handler_test.go、main.go、计划与示例说明；.vscode/settings.json照例核对且当前无diff，不强造修改；不push，无关.DS_Store保留，工作区验证脚本/二进制/日志不提交，实际哈希以Git历史为准。
 - 下一步：先验收本节，再按下一可见目标展开最小历史或流式聊天对照，不在本轮同时布置后续核心实现。
+
+### R.9 最小流式聊天（分阶段）
+
+#### R.9.1 POST /chat/stream：输入校验后逐段发送规则回答
+
+- 状态：已掌握（当前规则回答分段传输教学范围）；实现、测试、真实8091行为与输入错误/SSE边界、done/Handler收尾理解验收通过。本节不是模型逐token生成或完整Agent流验收。
+- 用户可见目标：新增POST /chat/stream，使用与/chat相同的message和可选session_id，先完成当前规则回答，再按Unicode码点发delta事件，每个data为仅content字段的JSON字符串；首条立即、后续由200ms Ticker等待，最后done事件data为完整chatResponse。输入如/upper go得到G、O两个delta和完整GO的done。这是已生成字符串的分段传输模拟，不是模型token流或完整Agent。
+- 本节只解决：把已学JSON输入、普通错误、replyToMessage、会话计数与SSE输出连起来；保持/chat、/events及中间件行为，不加模型、历史、浏览器页面、channel、新goroutine、流式Reader/EOF、通用绑定或公共JSON封装。
+- 学习者核心代码：新建examples/hertz-from-scratch/chat_stream_handler.go，chatDelta含Content string与小写json:content；newChatStreamHandler(*sessionStore) app.HandlerFunc返回请求闭包。main的newServer在现有/chat注册后新增POST /chat/stream并传同一个sessions，不创建第二store；旧Handler与store/处理函数不改。
+- 输入与状态边界：Content-Type415、接收后len超过4096返回413、Unmarshal400、TrimSpace message非空400、replyToMessage缺指令文本400，全部在sse.NewWriter之前处理；session_id去空白，无ID不计数。规则处理成功后调用nextTurn一次，含ID的done与/chat共用序列；之后客户端取消或写入失败不会回滚，这是服务端处理次数不是送达次数。
+- SSE协议：sse.NewWriter切换写入模式并设置text/event-stream/no-cache；for range []rune(answer)逐码点，避免按UTF8字节拆开中文，不宣称按用户可见字符簇或模型token。json.Marshal(chatDelta{Content:string(ch)})负责字段/转义，WriteEvent空id、delta/data负责SSE外层event/data/空行并刷新。循环后ctx.Err检查、Marshal完整response、WriteEvent done；Handler返回后Hertz收尾，不defer Writer.Close，不调用c.JSON/c.String追加第二种响应。流式取消/编码/写入失败日志+return且不发done，正常EOF无done不能作业务完成凭证；原HTTP1恢复器已支持流式panic中断，本节不用修改recovery。
+- 时间与取消：200ms Ticker仅用于观察分段，首条不等，后续select在Done或Ticker可读时结束等待，再检查Err；defer Stop不结束Handler，循环/return才结束。等待检查与WriteEvent错误互补，开启的WithSenseClientDisconnection仍沿用。长字符串按码点数延长教学发送时长，不作为生产吞吐方案。
+- 教学：分段讲输入错误/SSE边界、响应计数、rune与string转换、Ticker/select、JSON内层与SSE外层、done与框架收尾、共用store注册；每段有现在请写入与位置，最后完整文件和newServer对照。说明每个log前缀归属与%v，不引入无必要错误包装，不用无代码TODO代替教学。
+- 教材预验证：工作区overlay完整Hertz包test、StreamLesson race、vet/build通过；精确中文delta/JSON转义/done完整内容、无session done只answer、预取消与首条取消、Write/Flush失败不追加done、输入普通错误及GET405均检查。隔离18091四delta实际约0/0.2/0.4/0.6秒到达、无Content-Length、chunked、共享/chat计数1→stream2→chat3通过；curl提前0.1秒退出只首delta、ctx取消日志和计数不回滚通过。误改byte切分的工作区副本被中文格式测试发现。首次测试夹具使用不存在RequestHeader.SetContentType导致编译失败，已仅在工作区修为Header.Set后重跑通过；用户源码哈希不变，自建进程已停止，预验材料不提交。
+- 代码与运行验收：新增chat_stream_handler_test.go，精确核对中文两个delta与完整done、每事件Write/Flush调用、Handler不Finalize；六个内容/无会话场景覆盖回声、blank/null ID、JSON转义、组合码点和4096字节；十七个输入错误场景在直接Handler和路由测试中核对普通400/413/415且未进入SSE模式，GET/HEAD405。七个取消/写入失败场景覆盖预取消、首delta/末delta取消、delta与done的Write/Flush失败，取消和delta失败不追加done、不改写普通500，规则处理计数不回滚；done Flush失败时字节可能已写出，不能声称客户端一定未见done。gofmt、最小测试、完整Hertz包test、Stream/Session race、vet与临时build通过。
+- 真实入口验收：8091的/upper 你好Go四delta约0.001/0.202/0.402/0.602秒，done约0.602秒；text/event-stream/no-cache、chunked、无Content-Length、干净收尾、content小写键与完整answer核对通过；普通/chat→stream→chat共用同ID计数1/2/3。另无会话、指令/JSON/空白错误、媒体415、4097字节413、GET405、ping/hello回归通过；curl0.1秒退出28只见首delta、无done且已增加计数不回滚。仅overlay当前项目main监听地址的隔离18091进程确认ctx取消日志，已停止自建进程，不控制用户8091；用户核心文件hash未变。只overlay项目stream错误副本按byte拆中文，被正式格式测试发现。完整证据与临时材料留工作区不提交。
+- 理解验收：已确认输入校验必须在进入SSE模式前完成，以便错误仍返回普通HTTP400/413/415；响应字节已发送后不能改成另一份普通错误响应。完整answer先算好，循环发送JSON delta，done只是应用事件名称；正常发送done后因Handler逻辑结束而返回，由Hertz收尾本次响应，不等于必然关闭底层TCP连接。客户端断开由当前断开感知关联ctx取消，代码通过Done/Err或WriteEvent错误显式return，不继续发送delta/done；WithSenseClientDisconnection不负责正常done收尾。共享turn在规则处理成功后增加，发送失败不回滚。
+- Git检查点：提交主题 `feat(http): 添加规则回答的 SSE 流式聊天接口`；仅本节chat_stream_handler.go、chat_stream_handler_test.go、main接线、计划与示例说明；.vscode/settings.json照例核对且当前无diff，不强造改动；不push，无关.DS_Store保留，工作区脚本/日志/二进制不提交，实际哈希以Git历史为准。
+- 下一步：先验收本节；只有接入真实异步或模型流输入时再就地展开channel/goroutine/Reader与EOF，当前不预建这些能力。

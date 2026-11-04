@@ -39,6 +39,7 @@ func newServer() *server.Hertz {
 
 	sessions := newSessionStore()
 	h.POST("/chat", newChatHandler(sessions))
+	h.POST("/chat/stream", newChatStreamHandler(sessions))
 
 	return h
 }
