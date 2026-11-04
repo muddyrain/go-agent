@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2（各自限定教学范围）**
-- 当前小节：**R.8.2 消息处理函数与错误返回已验收；下一小节 R.8.3 最小会话状态（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3（各自限定教学范围）**
+- 当前小节：**R.8.3 最小会话计数已验收；下一节按最小历史或流式聊天的可见目标展开（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -401,3 +401,19 @@
 - 理解验收题：谁调用replyToMessage，为什么它不需要c；两个返回值分别是什么；处理函数return后为什么Handler还能继续；为什么缺少文本返回error而不是panic，为什么当前400映射不能直接套到未来模型故障。
 - Git检查点：提交主题 `feat(http): 分离 chat 消息处理并添加 upper 指令`；仅chat_logic.go、chat_logic_test.go、chat_handler.go、chat_handler_test.go、计划与示例说明。.vscode/settings.json无变化，不强造diff；无关.DS_Store保留，不push、不提交预验证材料，实际哈希以Git历史为准。
 - 下一步：先验收本节，再按下一用户可见目标决定最小会话输入/状态教学；公共JSON封装仅在明确消除重复且符合下一目标时展开，不预建多层框架。
+
+#### R.8.3 最小会话计数：跨请求状态与互斥锁
+
+- 状态：已掌握（当前进程内会话计数教学范围）；实现、测试、真实8091行为与共享store/Mutex临界区理解验收均通过。本节仅保存会话成功处理次数，不代表消息历史、模型记忆或完整生产会话能力。
+- 用户可见目标：POST /chat可选session_id；去两端空白后非空时，成功响应在answer之外返回小写session_id与turn，同一ID成功处理次数从1递增，不同ID独立。不传、null或纯空白session_id按无会话处理，仍只有answer。错误请求不递增，计数表示服务端文本处理成功，不代表客户端收到响应。
+- 本节只解决：让多次独立HTTP请求通过共同ID访问同一进程内状态；用普通map、Mutex和闭包说明状态归属、临界区和Handler构造。不是完整SessionManager，不保存消息/回答/个人资料、不做模型记忆、鉴权、随机ID生成、数据库、TTL、全局公共JSON封装或多层应用架构。
+- 学习者核心代码：新建examples/hertz-from-scratch/session_store.go，sessionStore含mu sync.Mutex与turns map[string]int；newSessionStore返回已初始化map的指针；nextTurn使用指针接收者，Lock/defer Unlock包住读取、加一、写回和取本次结果。chat_handler.go新增SessionID请求字段、omitempty响应字段SessionID与Turn，将chatHandler改为newChatHandler(*sessionStore) app.HandlerFunc并返回原Handler闭包，在replyToMessage成功后按非空ID计数；main.go的newServer在注册/chat前创建一个store，再注册newChatHandler(sessions)。chat_logic.go不改。
+- 生命周期与边界：每次newServer创建独立store，跨该server请求共享指针；禁止在请求函数里反复newSessionStore或通过值接收者复制Mutex。返回的闭包继续持有store，局部名字离开构造函数不等于对象失效；每请求局部req/message/answer/response不共享。锁只保护map短操作，不把文本处理、JSON写入、未来网络调用放入锁。并发turn保证不丢失/重复，不保证响应抵达顺序，也不是对整个HTTP会话排队或业务回滚。
+- 关键Go语法：map[string]int的键值类型、make初始化、缺失键读0、map元素++；结构体&取指针、构造函数是普通自定义函数、指针方法接收者、Mutex零值可用和不可复制；func返回函数/闭包捕获、外层return交Handler给路由而内层return结束当前请求；omitempty在当前编码语义下省略空字符串/数字0，同package无需按文件import。
+- 协议边界：session_id只作为客户端提供的教学分组键，不是身份凭证，知道同ID可影响同一计数；服务仅本机教学，不公开部署。新进程重启计数清空，不同进程不共享；无会话删除/过期/容量控制，新增不同ID会增长内存。不在本轮升级为生产会话或声称有模型历史。
+- 教材预验证：工作区overlay通过完整Hertz包test、Session/SessionHandler race、vet和build；处理层并发64次与Handler并发32次结果不重复，新server重置、无会话旧契约、输入失败不计数和session_id类型错均检查。隔离18091八种串行请求及32次网络并发计数通过；每次请求新建store的反向副本被会话测试发现。源码hash未变，隔离进程已停止，工作区脚本/日志/二进制不提交；不替代用户实现后的验收。
+- 教学方式：分段讲store状态/初始化、指针方法/锁、响应字段、Handler闭包与server注册；每段给“现在请写入”和完整文件/函数对照，一次讲完整，由用户写核心。先解释每个抽象消除的共享生命周期或并发问题，不只说框架需要。
+- 代码与运行验收：新增session_store_test.go验证独立ID/独立store与64次并发递增，chat_handler_test.go新增17个串行场景、不同server隔离与32次并发请求；覆盖无/空/blank/null ID仅answer、精确小写answer/session_id/turn、ID去空白及大小写、原各类输入错误和指令失败不计数。gofmt检查、完整Hertz包test、Session/Handler race、vet与工作区build通过。真实8091十三种请求核对同ID1/2、指令/空白失败后3、另一ID1、无/blank/null ID、类型错400、GET405、ping与greet回归；另32次网络并发取得不重复的1—32。使用独立测试分组，不操作用户已有会话或服务进程；用户三个核心文件哈希前后不变。只overlay项目main的每请求新建store错误副本，被TestChatSessionServerIsolation发现第二次仍1，原码未改；原始证据、临时脚本/二进制留工作区不提交。
+- 理解验收：已确认每次请求重新创建store会因map重置而始终返回turn=1；服务可并发处理请求，即使业务未主动启动goroutine，共享计数仍需同一把Mutex保护读取、加一、写回与取结果，防止数据竞争和丢失更新。锁保证计数操作完整，不是session_id唯一性或请求到达顺序；无ID保持仅answer，错误请求不计数。
+- Git检查点：提交主题 `feat(http): 添加进程内会话计数与并发保护`；仅本节session_store.go、session_store_test.go、chat_handler.go、chat_handler_test.go、main.go、计划与示例说明；.vscode/settings.json照例核对且当前无diff，不强造修改；不push，无关.DS_Store保留，工作区验证脚本/二进制/日志不提交，实际哈希以Git历史为准。
+- 下一步：先验收本节，再按下一可见目标展开最小历史或流式聊天对照，不在本轮同时布置后续核心实现。

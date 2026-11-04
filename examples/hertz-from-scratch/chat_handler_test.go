@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"mime"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/common/ut"
 )
 
@@ -132,6 +134,133 @@ func TestChatHandlerCommands(t *testing.T) {
 				t.Fatalf("response=%v want answer=%q", got, tt.answer)
 			}
 		})
+	}
+}
+
+func TestChatSessionCounts(t *testing.T) {
+	h := newServer()
+	for _, tt := range []struct {
+		name, body, contentType string
+		status                  int
+		answer, sessionID       string
+		turn                    int
+		wantError               string
+	}{
+		{"legacy", `{"message":"Go"}`, "application/json", 200, "收到：Go", "", 0, ""},
+		{"empty_id", `{"message":"Go","session_id":""}`, "application/json", 200, "收到：Go", "", 0, ""},
+		{"blank_id", `{"message":"Go","session_id":" \t\n "}`, "application/json", 200, "收到：Go", "", 0, ""},
+		{"null_id", `{"message":"Go","session_id":null}`, "application/json", 200, "收到：Go", "", 0, ""},
+		{"first", `{"message":"Go","session_id":" a "}`, "application/json", 200, "收到：Go", "a", 1, ""},
+		{"second", `{"message":"/upper Go","session_id":"a"}`, "application/json", 200, "GO", "a", 2, ""},
+		{"failed_command", `{"message":"/upper","session_id":"a"}`, "application/json", 400, "", "", 0, "text is required after /upper\n"},
+		{"blank_message", `{"message":"   ","session_id":"a"}`, "application/json", 400, "", "", 0, "message is required\n"},
+		{"wrong_field_type", `{"message":42,"session_id":"a"}`, "application/json", 400, "", "", 0, "invalid JSON request\n"},
+		{"wrong_id_type", `{"message":"Go","session_id":42}`, "application/json", 400, "", "", 0, "invalid JSON request\n"},
+		{"invalid_json", `{"message":"Go","session_id":"a"`, "application/json", 400, "", "", 0, "invalid JSON request\n"},
+		{"wrong_media", `{"message":"Go","session_id":"a"}`, "text/plain", 415, "", "", 0, "Content-Type must be application/json\n"},
+		{"too_large", `{"message":"Go","session_id":"a"}` + strings.Repeat(" ", 4097-len(`{"message":"Go","session_id":"a"}`)), "application/json", 413, "", "", 0, "request body too large\n"},
+		{"third_after_errors", `{"message":"Next","session_id":"a"}`, "application/json", 200, "收到：Next", "a", 3, ""},
+		{"other_id", `{"message":"Go","session_id":"b"}`, "application/json", 200, "收到：Go", "b", 1, ""},
+		{"id_case_sensitive", `{"message":"Go","session_id":"A"}`, "application/json", 200, "收到：Go", "A", 1, ""},
+		{"fourth", `{"message":"Again","session_id":"a"}`, "application/json", 200, "收到：Again", "a", 4, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := ut.PerformRequest(h.Engine, "POST", "/chat", &ut.Body{
+				Body: strings.NewReader(tt.body), Len: len(tt.body),
+			}, ut.Header{Key: "Content-Type", Value: tt.contentType}).Result()
+			if r.StatusCode() != tt.status {
+				t.Fatalf("status=%d want=%d body=%q", r.StatusCode(), tt.status, r.Body())
+			}
+			if tt.status != 200 {
+				if string(r.Body()) != tt.wantError || string(r.Header.Peek("Content-Type")) != "text/plain; charset=utf-8" {
+					t.Fatalf("unexpected error body=%q type=%q", r.Body(), r.Header.Peek("Content-Type"))
+				}
+				return
+			}
+			mediaType, _, err := mime.ParseMediaType(string(r.Header.Peek("Content-Type")))
+			if err != nil || mediaType != "application/json" {
+				t.Fatalf("unexpected response Content-Type=%q", r.Header.Peek("Content-Type"))
+			}
+			// 按实际JSON键反解，避免结构体宽容匹配掩盖字段标签错误。
+			var got map[string]json.RawMessage
+			if err := json.Unmarshal(r.Body(), &got); err != nil {
+				t.Fatal(err)
+			}
+			var answer, sessionID string
+			var turn int
+			if err := json.Unmarshal(got["answer"], &answer); err != nil {
+				t.Fatal(err)
+			}
+			if tt.sessionID == "" {
+				if len(got) != 1 {
+					t.Fatalf("without session, response must contain only answer: %s", r.Body())
+				}
+			} else {
+				if len(got) != 3 || json.Unmarshal(got["session_id"], &sessionID) != nil || json.Unmarshal(got["turn"], &turn) != nil {
+					t.Fatalf("expected exact answer/session_id/turn fields: %s", r.Body())
+				}
+			}
+			if answer != tt.answer || sessionID != tt.sessionID || turn != tt.turn {
+				t.Fatalf("response=%s want answer=%q session_id=%q turn=%d", r.Body(), tt.answer, tt.sessionID, tt.turn)
+			}
+		})
+	}
+}
+
+func TestChatSessionServerIsolation(t *testing.T) {
+	first, second := newServer(), newServer()
+	for _, tt := range []struct {
+		h    *server.Hertz
+		want int
+	}{{first, 1}, {first, 2}, {second, 1}, {first, 3}} {
+		body := `{"message":"Go","session_id":"same"}`
+		r := ut.PerformRequest(tt.h.Engine, "POST", "/chat", &ut.Body{
+			Body: strings.NewReader(body), Len: len(body),
+		}, ut.Header{Key: "Content-Type", Value: "application/json"}).Result()
+		var got struct {
+			Turn int `json:"turn"`
+		}
+		if r.StatusCode() != 200 || json.Unmarshal(r.Body(), &got) != nil || got.Turn != tt.want {
+			t.Fatalf("store must persist per server, not across servers: status=%d body=%s want turn=%d", r.StatusCode(), r.Body(), tt.want)
+		}
+	}
+}
+
+func TestChatSessionConcurrentRequests(t *testing.T) {
+	h := newServer()
+	const count = 32
+	turns := make(chan int, count)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < count; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			body := `{"message":"Go","session_id":"parallel"}`
+			r := ut.PerformRequest(h.Engine, "POST", "/chat", &ut.Body{
+				Body: strings.NewReader(body), Len: len(body),
+			}, ut.Header{Key: "Content-Type", Value: "application/json"}).Result()
+			var got chatResponse
+			if r.StatusCode() != 200 || json.Unmarshal(r.Body(), &got) != nil || got.Answer != "收到：Go" || got.SessionID != "parallel" {
+				t.Errorf("unexpected concurrent response: status=%d body=%s", r.StatusCode(), r.Body())
+				return
+			}
+			turns <- got.Turn
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(turns)
+	seen := make(map[int]bool)
+	for turn := range turns {
+		if turn < 1 || turn > count || seen[turn] {
+			t.Fatalf("invalid or repeated turn=%d", turn)
+		}
+		seen[turn] = true
+	}
+	if len(seen) != count {
+		t.Fatalf("unique turns=%d want=%d", len(seen), count)
 	}
 }
 
