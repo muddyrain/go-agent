@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1（各自限定教学范围）**
-- 当前小节：**R.9.1 POST /chat/stream 最小流式聊天已验收；下一节按真实流输入的可见目标展开（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2（各自限定教学范围）**
+- 当前小节：**R.9.2 已验收；下一节 R.10.1 离线两节点Workflow，随后对接简化 /tech-proposal（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -436,3 +436,20 @@
 - 理解验收：已确认输入校验必须在进入SSE模式前完成，以便错误仍返回普通HTTP400/413/415；响应字节已发送后不能改成另一份普通错误响应。完整answer先算好，循环发送JSON delta，done只是应用事件名称；正常发送done后因Handler逻辑结束而返回，由Hertz收尾本次响应，不等于必然关闭底层TCP连接。客户端断开由当前断开感知关联ctx取消，代码通过Done/Err或WriteEvent错误显式return，不继续发送delta/done；WithSenseClientDisconnection不负责正常done收尾。共享turn在规则处理成功后增加，发送失败不回滚。
 - Git检查点：提交主题 `feat(http): 添加规则回答的 SSE 流式聊天接口`；仅本节chat_stream_handler.go、chat_stream_handler_test.go、main接线、计划与示例说明；.vscode/settings.json照例核对且当前无diff，不强造改动；不push，无关.DS_Store保留，工作区脚本/日志/二进制不提交，实际哈希以Git历史为准。
 - 下一步：先验收本节；只有接入真实异步或模型流输入时再就地展开channel/goroutine/Reader与EOF，当前不预建这些能力。
+
+#### R.9.2 Go SSE 客户端：边读边显示与完成判定
+
+- 状态：已掌握（当前单行JSON delta/done客户端教学范围）；学习者保存核心实现，正式测试、race、vet/build、真实go run与完成判定理解验收通过。不是通用SSE解析器或完整模型流客户端。
+- 用户可见目标：不再只用curl看原始event/data行；独立Go程序向本机POST /chat/stream发送message与可选session_id，逐delta解码并直接输出文字，完整done.answer与累计内容核对，读取正文正常结束后显示完成及可选会话次数。HTTP400等普通错误显示状态和正文；没有done或中途读取失败不显示完成。
+- 文件与职责：学习者新建examples/hertz-chat-client/main.go与client.go，复用根go.mod、不新建模块。main只定义-message/-session参数、10秒总时限HTTP Client、调用sendChatStream与退出码；client.go定义协议结构体、sendChatStream和readChatStream。不同目录package main是不同包，客户端仅按HTTP契约定义DTO，不导入服务端main或生产internal。当前server Handler/路由/会话/依赖保持不变。
+- 发送链：json.Marshal请求结构体→bytes.NewReader→http.NewRequest POST→Content-Type application/json、Accept text/event-stream→Client.Do→defer Body.Close。Do得到响应头不等正文读完；非2xx不会自动成为Do error，先主动检查StatusCode，非200只读取最多4096字节错误正文片段；200解析Content-Type须为text/event-stream，再调用readChatStream。不是把整个SSE ReadAll后才显示。
+- 读取核心：bufio.NewScanner(body)默认按行，临时eventType/eventData记录当前事件，在空行时才分派delta/done；data为JSON，Unmarshal解码后用strings.Builder累计及fmt.Fprint(out)立即输出。done保存完整结果并与累计文本核对，标记done=true后继续读至正文EOF，拒绝done后的额外事件。扫描停止先检查scanner.Err（EOF被Scanner隐藏为nil，传输/超限错误仍非nil），再检查未结束事件与未见done；EOF只代表输入结束，不代表业务完成或TCP断开。
+- 输出与生命周期：readChatStream返回streamResult/error；sendChatStream核对done的session_id为请求去两端空白后的ID、计数有效性后才打印完成。失败时可保留已输出的部分回答，但不补成功提示；Body.Close在sendChatStream返回前执行，main收到error后打印stderr并Exit(1)不跳过该清理。默认10秒时限包含连接与整个正文读取，只用于短消息教学，长流需重新定义策略；不新增重试或后台goroutine。
+- 关键Go语法：flag.String返回*string、Parse后解引用；io.Reader/io.Writer接口分别表示读入/写出能力，HTTP Body、strings.Reader、bytes.Buffer及os.Stdout可按能力作为参数；strings.Builder.WriteString是内存累计，不等网络写出。fmt.Errorf前缀标具体失败步骤，%w保留已有错误链、%d用于HTTP数值状态、%s插文本、%q用于引号与转义；没有底层错误对象的校验用errors.New或格式化消息，不乱用%w。switch/continue与多个赋值就地解释，核心函数分段后给完整对照。
+- 简版解析边界：只消费当前本机服务的event:空格、单行data:空格、JSON delta/done格式；支持LF/CRLF，不是完整SSE规范实现。未实现多data行、id/retry/注释/BOM/重连与通用字段策略；Scanner默认单行大小限制仍保留，超长行报错。10秒总时限不是总体内存配额，累计回答无独立总量限；不公开作为生产SDK或任意服务通用解析器。
+- 教材预验证：工作区main/client/test副本test、race、vet/build通过；12个解析场景覆盖正常/LF与CRLF/空行、EOF无done/未结束事件、坏JSON/空delta/空done/内容不符、done后事件、未知字段；额外验证读取/输出错误%w保持错误链，5个HTTP场景包括400/错误媒体/会话不符/非法turn，管道测试证明EOF前已输出delta。Go客户端实际连接8091，短消息逐段输出首段至末段约相差0.8秒，同会话连续两次1/2，/upper缺参显示HTTP400并exit1；移除done必需检查的工作区反向副本被无done测试发现。教材副本/测试/临时二进制与证据不提交；用户服务端源码未改、服务进程不操作。
+- 代码与运行验收：助手新增正式examples/hertz-chat-client/client_test.go，覆盖LF/CRLF/JSON转义、逐字节Reader跨UTF-8和行边界、空流/缺done/半帧/错误JSON/空content/回答不符/额外事件/未知行及Scanner超长行；HTTP请求方法、头和JSON字段、session去空白/无ID、400/500、错误媒体类型、非法turn及4096字节错误正文片段；读取/输出/transport错误包装、成功及失败路径Body.Close。测试专用io.Pipe控制delta先到、done已到但正文未结束，验证即时显示及继续读到EOF，不给业务新增goroutine。正式包test、race、vet与工作区路径build通过；当前实际工具链go1.26.0 darwin/arm64，不修改go.mod或依赖。
+- 真实入口：以go run ./examples/hertz-chat-client连接现有8091，/upper 你好 Go逐段显示，首delta到末delta间隔约0.8秒，stdout最终为回答及完成、stderr空、exit0；独立测试会话连续两次turn1/2。/upper缺参和空白message均HTTP400、stdout空、不显示完成、exit1，go run另打印exit status 1。只overlay当前项目client.go的错误副本删除必需done检查，正式无done测试发现error为nil而失败；用户客户端与服务端关键文件hash前后未变，原始证据/临时二进制/反向副本只留工作区，未操作用户服务进程。
+- 理解验收：确认event名称由服务端WriteEvent第二参数给出，经event行保存到eventType再由switch匹配；Scanner创建不发请求，Scan按需读取Body并按行拆分，Text取最近一行；Builder仅在内存累计，fmt.Fprint(out)才写到本次传入的os.Stdout。完成判定要求合法done与正文正常读取结束：EOF表明正文已结束，不保证完整回答已交付，缺done返回SSE ended without done，不显示完成。保留WriteString而去掉Fprint仍累计但不显示delta。
+- Git检查点：提交主题 `feat(http): 添加 Go SSE 聊天客户端`；范围仅用户main.go/client.go、client_test.go、根计划与示例说明；.vscode/settings.json已核对无diff，不强造修改；不push、不提交临时材料，实际哈希以Git历史为准。
+- 下一步：R.10按简化Workflow目标分小节，先离线两节点Chain验证类型与调用链，再接POST /tech-proposal；不把规则输出冒充模型生成，不预建channel、重试或生产封装。
