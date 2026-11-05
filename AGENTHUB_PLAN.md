@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1（各自限定教学范围）**
-- 当前小节：**R.10.1 离线两节点Workflow已验收；下一节R.10.2对接简化 POST /tech-proposal（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2（各自限定教学范围）**
+- 当前小节：**R.10.2 Workflow HTTP已验收；下一节按根路线与具体缺口展开（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -469,3 +469,18 @@
 - 理解验收：确认Compile只构建接线，Invoke才处理本次任务；build_proposal通过AddInput(analyze_task)接收analyzeTask产生的taskAnalysis，不是直接拿入口proposalRequest。stdout正常结果与stderr故障说明分开，Fprintln第一参数指定输出目标；写stderr不会自动结束程序，os.Exit(1)才退出。不把可编译视为重复调用正确，也不要求机械背框架写法。
 - Git检查点：提交主题 `feat(workflow): 添加离线两节点 Eino 编排示例`；仅本节main.go、workflow.go、workflow_test.go、根计划和examples/README.md；.vscode/settings.json已核对无diff、不强造修改，不push，不混入临时材料，实际哈希以Git历史为准。
 - 下一步：R.10.2把同一已验证Runnable接到最小POST /tech-proposal，届时展开构建一次与请求多次Invoke的生命周期；当前不同时布置HTTP实现。
+
+#### R.10.2 同一Workflow的HTTP入口：构建一次，每请求Invoke
+
+- 状态：已掌握（当前固定Workflow的HTTP适配教学范围）；用户核心、正式测试、race、vet/build、真实8092与CLI回归及请求上下文理解验收通过。未接真实模型或SSE，不代表完整生产Workflow故障策略。
+- 用户可见目标：保留go run ./examples/workflow-from-scratch -task的离线输出；增加-serve在127.0.0.1:8092提供POST /tech-proposal，JSON task输入，成功仅小写result字段，其值是原固定规则方案；普通输入错误返回纯文本415/413/400，不调用Workflow。输出仍标明非模型生成，非SSE/Agent自动规划。
+- 改动范围：workflow.go/workflow_test.go及原8091HTTP/SSE、生产internal均保持；http.go只定义proposalHTTPRequest(Task json:task)、proposalHTTPResponse(Result json:result)、newProposalHandler(Runnable)闭包与newProposalServer。main增加flag.Bool serve，在已构建Runnable后分支Spin/return，CLI原Invoke保留。复用当前根模块与Eino/Hertz，不新建模块、不搬代码到生产、不加公共JSON层或重试。
+- 生命周期与类型：main在模式分支前newProposalWorkflow一次，构建错误先退出；HTTP注册newProposalHandler(workflow)仅生成并登记函数，不执行任务。请求进入闭包，局部req/task/result独立，捕获的Runnable沿服务生命周期复用；Invoke(ctx,proposalRequest{Task:task})使用当前请求context而非启动Background。本节节点无共享可变业务状态，无需会话Mutex，不把所有未来Runnable组件都断言为自动并发安全。
+- HTTP检查：ParseMediaType→Hertz接收后的body长度4096字节上限→Unmarshal→TrimSpace task非空→Invoke→c.JSON。错误依次为Content-Type must be application/json换行、request body too large换行、invalid JSON request换行、task is required换行；未知/重复字段保留Unmarshal默认行为。HTTP结构体与Workflow内部类型显式转换，只解释传输边界，不提前创建应用接口；节点空任务检查保留保护CLI/直接调用，Handler预检承担准确400映射，不通过err.Error文本判断业务错误。
+- 失败归属：已通过输入校验后的Workflow error记录proposal workflow failed前缀和%v，当前返回通用500 workflow execution failed换行，随后return；不在Handler调用os.Exit或把所有内部error写400，不公开内部节点诊断。取消/时限详细HTTP策略后续按实失败展开，当前原样传ctx、可合作返回错误，不声称生产完整故障分类。c.JSON直接接Go对象，Content与result字段映射，不把预Marshal字节再次JSON编码。
+- 服务构造：独立8092使用server.Default自带recovery，避免重复复制8091自定义中间件；此前server.New显示自写恢复器，本节明确Default=New再Use内置recovery，普通error分支仍由Handler处理，panic兜底不保证同样正文。WithHandleMethodNotAllowed(true)保留方法分发，WithSenseClientDisconnection(true)用于当前Mac/netpoll请求取消通知，与是否SSE无关；不保证Windows或其他运输实现相同。Spin运行到停止后return避免落入CLI，再执行一次任务；serve参数为*bool需解引用。
+- 教材预验证：工作区main/http与当前workflow原码/旧测试组合，HTTP与旧Workflow完整test/race/vet/build通过；13项输入错误与方法/未知路由未Invoke，6项成功包含去空白/转义/默认未知重复字段/4096边界，响应恰有result键，Invoke每请求一次；请求ctx传递与500通用正文/服务端日志，8项并发请求各自任务无串值。真实临时8092三成功、415/413/400、GET405、未知404 Not Found及8并发任务通过，CLI原行为保留，临时实例已停止、用户8091未控制。移除HTTP task预检的工作区错误副本被测试发现空task走到Invoke并500；源码/模块哈希不变，临时测试/日志/脚本/二进制不提交。
+- 代码与运行验收：助手新增正式http_test.go，十五项输入校验与方法/未知路径核对未Invoke，六项成功核对精确小写result键、输入去空白/转义、Unmarshal未知重复字段默认行为与4096边界；注册不执行任务、服务选项、每请求一次Invoke、本次ctx原样传入、取消上下文错误、内部失败精确通用500与日志、下一请求仍成功，八项并发结果独立。实际包旧Workflow+HTTP test/race/vet/build及gofmt通过。原go run正常和空任务CLI回归；现有用户8092仅请求不控制进程，三成功、415/413/400、4096边界、GET405、未知404、八并发网络请求通过。只overlay项目文件的隔离18092人为节点错误返回通用500、后续200，诊断仅服务端日志；自建进程已停止。删HTTP task预检的工作区反向副本被正式测试发现空task误入Invoke/500，原码重跑通过；main/http/workflow与模块hash不变，临时文件不提交。
+- 理解验收：确认main启动时newProposalWorkflow/Compile一次，两个正常HTTP请求各Invoke一次；闭包持有已构建Runnable，本次req/task/result独立。Handler中的ctx由Hertz随本次请求传入，不是main构建时的Background；Invoke将本次取消关系传给框架与节点，节点通过Err或支持取消的下游协作退出。当前Mac/netpoll断开感知启用后客户端断开可取消请求ctx，ctx不是强杀器或整个服务开关；使用新的Background会切断本次请求关系，而从请求ctx派生子上下文可以保留关系。
+- Git检查点：提交主题 `feat(workflow): 添加技术方案 Workflow HTTP 入口`；仅main.go、http.go、http_test.go、根计划与examples/README.md；.vscode/settings.json已核对无diff，不强造修改，不push、不提交临时证据或生产文件，实际哈希以Git历史为准。
+- 下一步：本节收尾后按根路线和具体缺口选择下一小节，不立即加入模型或完整生产工作流。
