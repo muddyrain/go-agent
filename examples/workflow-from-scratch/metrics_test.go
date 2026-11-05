@@ -32,11 +32,23 @@ func readRequestCounters(h *server.Hertz) (map[string]float64, error) {
 		return nil, fmt.Errorf("parse request metrics: %w", err)
 	}
 	values := map[string]float64{}
-	if len(families) == 0 {
-		return values, nil
+	// 后续耗时指标是另一个族；计数断言仍只读取Counter族。
+	durationFamily := families["agenthub_proposal_request_duration_seconds"]
+	expectedFamilies := 1
+	if durationFamily != nil {
+		expectedFamilies++
+		if durationFamily.GetType().String() != "HISTOGRAM" {
+			return nil, fmt.Errorf("unexpected duration family: %v", durationFamily)
+		}
 	}
 	family := families["agenthub_proposal_requests_total"]
-	if len(families) != 1 || family == nil || family.GetType().String() != "COUNTER" {
+	if family == nil {
+		if len(families) != expectedFamilies-1 {
+			return nil, fmt.Errorf("unexpected metric families: %v", families)
+		}
+		return values, nil
+	}
+	if len(families) != expectedFamilies || family.GetType().String() != "COUNTER" {
 		return nil, fmt.Errorf("unexpected metric families: %v", families)
 	}
 	for _, metric := range family.Metric {

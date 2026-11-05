@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1（各自限定教学范围）**
-- 当前小节：**R.11.1 请求计数与 GET /metrics已验收；下一节 R.11.2 处理耗时 Histogram（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2（各自限定教学范围）**
+- 当前小节：**R.11.2 处理耗时 Histogram已验收；下一小节 R.12.1 接口与错误链（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -503,3 +503,18 @@
 - 理解验收：区分创建/注册、按标签选择、Inc加一、Gather收集和expfmt编码；指标不是HTTP业务必需或自动上传，Prometheus客户端库不等监控服务器。标签名与值数量/顺序对应，不同标签组合属于同名指标族，families是族切片而非请求明细。Next返回只表示下游执行返回，不保证客户端收到；外层计数等内层恢复后读取普通500，错误响应也计数。当前只有POST，未增加无区分价值的method标签。
 - Git检查点：提交主题 `feat(metrics): 添加 Workflow HTTP 请求计数`；仅metrics.go、metrics_test.go、http.go、go.mod/go.sum、根计划与examples/README.md；.vscode/settings.json已核对无diff、不强造修改，不push，提交哈希以Git历史为准。
 - 下一步：R.11.2在同一指标对象增加处理耗时Histogram，先解释Observe与累计bucket；不同时引入监控平台或模型。
+
+#### R.11.2 处理耗时 Histogram
+
+- 状态：已掌握（当前处理耗时教学范围）；用户核心、正式测试、race、vet/build、真实隔离HTTP、反向测试和理解验收通过。不代表监控平台或旧生产I.6已完成。
+- 用户可见目标：同一GET /metrics保留按status的请求次数，并新增目标POST处理耗时的bucket/sum/count；能够区分“请求多少次”和“处理时间分布”，不靠单条日志估计总体情况。
+- 范围：仅metrics.go新增time导入、duration prometheus.Histogram字段、NewHistogram/注册/返回及middleware测量Observe；main/http/Workflow/原handler不改，没有新路由、依赖或人为慢业务。助手调整原计数测试的族检查，允许已知Histogram作为第二族；旧计数断言保持，并新增正式duration_test.go验证耗时数据与调用时序。
+- 初始化：固定Name agenthub_proposal_request_duration_seconds，Help明确包含错误响应；经典Histogram无业务标签，Buckets为教学阈值[]float64{0.001,0.01,0.1,1}，单位秒、严格递增上界，+Inf由库提供。非生产SLO或通用最优配置。单个Histogram已经有sum/count/bucket，不额外创建多个Counter、不用HistogramVec无依据增加状态标签。
+- 接口与接线：Histogram是库定义的接口，NewHistogram直接返回接口值，因此字段不是*prometheus.Histogram；当前实现提供Observe/Collector等能力。在本服务原Registry中MustRegister(requests,duration)，返回requestMetrics时同时持有，仍构造一次；原h.Use/GET metrics无需改，Gather自动收集新族，expfmt循环自动编码。
+- 时间语义：middleware入口started:=time.Now，Next返回立即elapsed:=time.Since(started).Seconds，再保留方法/FullPath范围检查、原Inc，并duration.Observe(elapsed)一次。测量当前下游校验、Workflow、缓冲响应与恢复处理，不含接收完整请求前的网络时间、客户端传输/显示或指标更新，不声称端到端时间；每请求局部started/elapsed，不共享起点、不使用Sleep/Ticker。Seconds返回float64秒，直接float64(Duration)会成为纳秒数，Milliseconds还会丢亚毫秒精度，本节不得混单位。
+- 观察与输出：Observe加入一个耗时样本，同时更新总数、耗时总和与分桶统计，不是替换最后一次时间、不累加秒到原请求Counter、不直接输出。经典bucket le表示小于等于上界的累计次数，0.02秒可同时进入0.1/1/+Inf的统计，不将bucket求和当请求数；count等于+Inf总数，sum单位秒，sum/count仅count>0时为本实例累计平均，不是每次耗时明细或P99。无标签Histogram创建后就有0输出，与空CounterVec按需创建标签实例不同。
+- 教材预验：仅project路径overlay到工作区副本，完整旧Workflow/HTTP/Counter与耗时tests/race/vet/build通过。确定性Observe样本0.0005/0.01/0.2/1.2，bucket累计1/2/2/3/4、sum1.4105/count4，0.01边界包含；初始0、两个server隔离、抓取不更新、错误/恢复500、32并发及8抓取、通道控制下游返回前无观察与至少20ms等待秒单位验证均通过。隔离18112真实HTTP五响应后count5、16并发后count21，原计数相等、bucket单调/+Inf一致，重复查询和405/404不变，自建进程已停，用户8092/8091未控制。漏Observe及毫秒当秒错误副本被预验测试识别，原根核心和模块hash不变；临时证据不提交。
+- 代码与运行验收：正式duration_test.go回读实际指标文本，核对Histogram族无业务标签、bucket上界/单调/+Inf=count、初始零、独立实例；四个确定性样本核对累计1/2/2/3/4与sum/count，单个0.005样本进入多个桶但count=1。六响应及排除方法路径、32并发与8抓取、恢复500/Workflow500后200、通道控制下游返回前无观察和至少20ms秒单位测量均通过。实际包fmt/test/race/vet/build及原go run CLI成功/空任务回归通过。仅overlay项目端口的隔离18122真实HTTP六响应后count6、16并发后count22，Counter各状态总数与Histogram一致、bucket累计/+Inf准确；重复抓取及405/404不变，自建进程已停，用户8092/8091未控制。漏Observe和毫秒当秒错误副本被正式测试识别，原源码重跑通过，用户核心与模块hash在验证前后保持，临时证据不提交。
+- 理解验收：确认0.005秒样本同时被le=0.01和le=0.1等更大累计桶包含，但count只增加一次；从全零状态Observe(0.005)后count=1、sum=0.005。区分时间点与时长、Seconds换算和Observe更新，按指标名字归族而非按每个耗时创建族；bucket是小于等于上界的累计次数，不是相邻阈值区间。
+- Git检查点：提交主题 `feat(metrics): 添加 Workflow HTTP 处理耗时指标`；仅metrics.go、metrics_test.go、duration_test.go、go.mod、根计划与examples/README.md。client_model仅因正式测试直接导入而归为直接依赖，版本未升级，go.sum无变化；.vscode已核对无diff，不强造修改，不push，实际哈希以Git历史为准。
+- 下一步：R.12.1在现有Workflow CLI演示取消并用errors.Is识别包装错误，补error接口与%w错误链理解；不同时加入监控平台或模型。
