@@ -14,6 +14,7 @@
 | `http-from-scratch` | 二轮 R.1—R.6 | 标准库 HTTP 教学练习；纯文本、JSON、全局日志、请求级 panic 恢复、R.4 请求取消/处理时限、R.5 表驱动/路由测试已验收；R.6.1 `/events` 固定四事件逐段刷新已验收，包装器补齐 ResponseController 刷新但未完整代理可选接口；R.6.2 `/events/demo` 浏览器逐事件显示、done关闭和手动停止已验收（从项目根启动） | `go run ./examples/http-from-scratch` |
 | `hertz-from-scratch` | 二轮 R.7—R.9.1 | Hertz 对照练习；R.7.1 两条GET路由、查询参数、纯文本响应与404/405分发已验收；R.7.2 POST /greet 的JSON请求/响应及前置校验已验收（大小检查在正文接收后）；R.7.3.1 Use/Next请求日志已验收，方法/路径/同步处理耗时统一记录（不含query/body，不承担异常恢复）；R.7.3.2普通缓冲响应恢复已验收，GET /panic返回通用500、故障详情仅写服务端日志；R.7.4 GET /events固定四事件逐次刷新与取消已验收，当前netpoll开启断开感知、HTTP/1流式panic中断连接（不重写500，不保证HTTP2/其他运输实现）；R.8.1 POST /chat输入校验与普通规则回复已验收（收到前缀，不接模型或会话）；R.8.2独立消息处理函数与/upper指令已验收，回答/预期输入错误由函数返回、HTTP映射保留在Handler；R.8.3可选session_id的进程内成功处理计数已验收，无ID保持仅answer，不保存消息，重启清空，非鉴权或模型记忆；R.9.1 POST /chat/stream已验收，规则回答先生成再按码点发送JSON delta、最后done，输入错误在SSE前返回；共用会话计数，发送取消不回滚计数，尚未接模型流；课程状态以根学习计划为准；监听127.0.0.1:8091，保留标准库示例作对照 | `go run ./examples/hertz-from-scratch` |
 | `hertz-chat-client` | 二轮 R.9.2 | 标准库Go客户端消费8091的POST /chat/stream；逐行读取当前单行JSON事件协议，空行分派delta/done；Builder累计、终端立即显示，核对完整done与正文正常结束后输出完成和可选会话次数。HTTP错误、缺done、读取/输出失败与Body关闭已测试，真实go run逐段显示和计数递增通过；课程完成状态以根计划为准。不是通用SSE解析器，不自动重连；10秒总超时仅用于短消息教学 | `go run ./examples/hertz-chat-client -message '/upper 你好 Go'` |
+| `workflow-from-scratch` | 二轮 R.10.1 | 离线两节点 Eino Workflow：proposalRequest经任务整理转taskAnalysis，再生成固定练习步骤的proposalResult；Compile构建，Invoke执行，终端正常结果与stderr错误分离。节点、接线、取消和实际CLI已验收；规则模板非模型生成，尚未接HTTP，不读项目证据或调用外部模型 | `go run ./examples/workflow-from-scratch -task '给聊天接口补一个测试'` |
 
 ## 维护边界
 

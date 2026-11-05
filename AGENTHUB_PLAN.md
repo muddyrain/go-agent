@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第二编：Hertz 对照与独立复现**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2（各自限定教学范围）**
-- 当前小节：**R.9.2 已验收；下一节 R.10.1 离线两节点Workflow，随后对接简化 /tech-proposal（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1（各自限定教学范围）**
+- 当前小节：**R.10.1 离线两节点Workflow已验收；下一节R.10.2对接简化 POST /tech-proposal（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -452,4 +452,20 @@
 - 真实入口：以go run ./examples/hertz-chat-client连接现有8091，/upper 你好 Go逐段显示，首delta到末delta间隔约0.8秒，stdout最终为回答及完成、stderr空、exit0；独立测试会话连续两次turn1/2。/upper缺参和空白message均HTTP400、stdout空、不显示完成、exit1，go run另打印exit status 1。只overlay当前项目client.go的错误副本删除必需done检查，正式无done测试发现error为nil而失败；用户客户端与服务端关键文件hash前后未变，原始证据/临时二进制/反向副本只留工作区，未操作用户服务进程。
 - 理解验收：确认event名称由服务端WriteEvent第二参数给出，经event行保存到eventType再由switch匹配；Scanner创建不发请求，Scan按需读取Body并按行拆分，Text取最近一行；Builder仅在内存累计，fmt.Fprint(out)才写到本次传入的os.Stdout。完成判定要求合法done与正文正常读取结束：EOF表明正文已结束，不保证完整回答已交付，缺done返回SSE ended without done，不显示完成。保留WriteString而去掉Fprint仍累计但不显示delta。
 - Git检查点：提交主题 `feat(http): 添加 Go SSE 聊天客户端`；范围仅用户main.go/client.go、client_test.go、根计划与示例说明；.vscode/settings.json已核对无diff，不强造修改；不push、不提交临时材料，实际哈希以Git历史为准。
-- 下一步：R.10按简化Workflow目标分小节，先离线两节点Chain验证类型与调用链，再接POST /tech-proposal；不把规则输出冒充模型生成，不预建channel、重试或生产封装。
+- 下一步：R.10按简化Workflow目标分小节，先离线两节点Workflow验证类型与调用链，再接POST /tech-proposal；不把规则输出冒充模型生成，不预建channel、重试或生产封装。
+
+### R.10 简化技术方案 Workflow（分阶段）
+
+#### R.10.1 离线两节点：整理任务 → 固定练习方案
+
+- 状态：已掌握（当前离线固定两节点编排教学范围）；用户核心、正式测试、实际CLI、类型/构建与执行理解验收通过。未接模型或HTTP，不代表完整技术方案生成能力。
+- 用户可见目标：go run接收-task，在终端显示去空白后的任务与固定三步练习方案；空任务报错并非零退出。输出明确标注规则模板（非模型生成），不声称完成真实技术分析或自动执行任务。
+- 文件与范围：新建examples/workflow-from-scratch/workflow.go及main.go，复用根go.mod与当前Eino v0.9.19。workflow.go包含proposalRequest、taskAnalysis、proposalResult、analyzeTask、buildProposal与newProposalWorkflow；main仅解析参数、创建上下文、构建与Invoke后输出。现有HTTP/SSE、生产internal/techproposal及依赖不改，不读项目证据、访问模型或新增业务goroutine。
+- 调用链：START(proposalRequest)→analyze_task(analyzeTask，输出taskAnalysis)→build_proposal(buildProposal，输出proposalResult)→END。普通函数可直接调用，Eino封装仅用于对照现有Workflow的类型与编排边界，不为了两个固定步骤声称必须上框架；不预建节点接口、服务层或配置层。
+- 核心教学：先定义输入/中间/输出结构，再逐段写两个普通节点；ctx.Err在节点入口检查协作取消，TrimSpace与空任务错误；Builder和Fprintf(&content)仅内存构建，main的fmt.Print才写终端。newProposalWorkflow用NewWorkflow[I,O]声明总体输入输出、InvokableLambda适配普通函数、AddLambdaNode指定唯一节点键、AddInput指定上游并传整个输出、End接最终结果；最后Compile构建Runnable，Invoke才执行一次任务。强调Eino Compile不是Go编译器，也不替代节点业务校验。
+- 语法与错误：方括号为泛型类型参数，不是切片内容；InvokableLambda从函数签名推断I/O，传函数名不是立即调用；节点名字符串与函数标识符不同。AddLambdaNode返回WorkflowNode，链式AddInput等价于分两句；Runnable[I,O]为执行接口，构建失败返回nil/error，节点失败返回空结构/error。fmt.Errorf的compile/analyze/build前缀表示失败阶段，%w保留底层错误，固定输入错误用errors.New；Fprintf的%s插入文本、%d编号，&content为Builder指针，替代直接函数串联和普通字符串累积就地讲明影响。
+- 教材预验证：工作区main/workflow/test副本test、race、vet/build及go run通过；检查精确规则输出、去空白、空任务、直接节点/整体取消、构建阶段零节点调用、Invoke顺序及输入错误停止下游。错误接线将build_proposal直接接START，CLI在初始化时报proposalRequest与taskAnalysis类型不匹配，非业务执行错误；原教材未改，临时文件/二进制不提交。
+- 代码与运行验收：用户修正main初始化错误检查前多余Invoke，入口先检查构建结果、只调用一次Invoke；正式workflow_test.go覆盖五种任务整理、输入步骤真实传递到文本节点、同Runnable多次结果独立、节点与整体取消/DeadlineExceeded错误链、Compile零节点执行、Invoke顺序及输入错误不执行下游、接线类型错在构建阶段发现。gofmt、实际包test/race/vet及工作区build通过。真实go run默认/去空白任务精确规则文本、空任务stderr错误且stdout空/exit1；仅工作区overlay记录节点入口，确认analyze_task/build_proposal各一次；构建错误及强制初始化失败先错误退出不调用nil Runnable。重加Invoke的错误副本虽stdout仍正常，入口观测发现每节点执行两次。用户main/workflow与go.mod/go.sum哈希前后不变，未修改核心或依赖、未请求网络模型，临时证据/二进制/overlay不提交。
+- 理解验收：确认Compile只构建接线，Invoke才处理本次任务；build_proposal通过AddInput(analyze_task)接收analyzeTask产生的taskAnalysis，不是直接拿入口proposalRequest。stdout正常结果与stderr故障说明分开，Fprintln第一参数指定输出目标；写stderr不会自动结束程序，os.Exit(1)才退出。不把可编译视为重复调用正确，也不要求机械背框架写法。
+- Git检查点：提交主题 `feat(workflow): 添加离线两节点 Eino 编排示例`；仅本节main.go、workflow.go、workflow_test.go、根计划和examples/README.md；.vscode/settings.json已核对无diff、不强造修改，不push，不混入临时材料，实际哈希以Git历史为准。
+- 下一步：R.10.2把同一已验证Runnable接到最小POST /tech-proposal，届时展开构建一次与请求多次Invoke的生命周期；当前不同时布置HTTP实现。
