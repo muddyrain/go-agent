@@ -88,10 +88,10 @@
 
 ## 7. 当前学习位置
 
-- 当前阶段：**二轮第二编：Hertz 对照与独立复现**
+- 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2（各自限定教学范围）**
-- 当前小节：**R.10.2 Workflow HTTP已验收；下一节按根路线与具体缺口展开（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1（各自限定教学范围）**
+- 当前小节：**R.11.1 请求计数与 GET /metrics已验收；下一节 R.11.2 处理耗时 Histogram（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -484,3 +484,22 @@
 - 理解验收：确认main启动时newProposalWorkflow/Compile一次，两个正常HTTP请求各Invoke一次；闭包持有已构建Runnable，本次req/task/result独立。Handler中的ctx由Hertz随本次请求传入，不是main构建时的Background；Invoke将本次取消关系传给框架与节点，节点通过Err或支持取消的下游协作退出。当前Mac/netpoll断开感知启用后客户端断开可取消请求ctx，ctx不是强杀器或整个服务开关；使用新的Background会切断本次请求关系，而从请求ctx派生子上下文可以保留关系。
 - Git检查点：提交主题 `feat(workflow): 添加技术方案 Workflow HTTP 入口`；仅main.go、http.go、http_test.go、根计划与examples/README.md；.vscode/settings.json已核对无diff，不强造修改，不push、不提交临时证据或生产文件，实际哈希以Git历史为准。
 - 下一步：本节收尾后按根路线和具体缺口选择下一小节，不立即加入模型或完整生产工作流。
+
+### R.11 指标入门（分阶段，先在教学服务验证）
+
+#### R.11.1 按响应状态计数与 GET /metrics
+
+- 状态：已掌握（当前请求计数教学范围）；用户实现、正式测试、race、vet/build、隔离真实HTTP与CLI回归、指标分组与累加职责理解验收通过。不代表监控平台、Histogram或生产可观测性已完成。
+- 用户可见目标：8092的GET /metrics返回Prometheus文本格式；POST /tech-proposal处理后按status分组累加，先发正常和空任务请求即可看到200/400计数；重复查询metrics不加业务计数，不再只靠单条日志猜总体请求情况。
+- 范围：新增examples/workflow-from-scratch/metrics.go，含requestMetrics(registry/CounterVec)、newRequestMetrics、middleware与handler；http.go仅改newProposalServer，创建一份metrics，server.New后Use(metrics.middleware,recovery.Recovery())，保留原POST并增加GET metrics。main/Workflow/业务Handler不改，原CLI保持；本节不加Histogram/PromQL/监控平台/模型，不改生产入口，R.11整体及旧I.6尚未完成。
+- 依赖：固定github.com/prometheus/client_golang v1.23.2与github.com/prometheus/common v0.66.1，分别使用prometheus和expfmt包；根go.mod按实际导入归为直接依赖，其余相关库保留间接依赖。既有版本和go1.25.11声明未升级，未宽范围tidy旧依赖。下载使用命令级代理并保留GOSUMDB校验，未修改全局环境。
+- 指标与生命周期：NewRegistry是每服务独立的空收集注册表，NewCounterVec定义agenthub_proposal_requests_total和status单标签，MustRegister只在新Registry登记固定合法指标，配置错误panic而非请求输入错误。创建CounterVec不等创建每个标签组合；第一次WithLabelValues访问对应组合时创建Counter，未Inc可保持0，Inc才加一。当前中间件在选择后立即Inc；无请求且未预初始化时metrics正文可为空。registry和requests被同一requestMetrics指针持有，服务构造一次，不每请求重置。
+- 请求计数：middleware指针接收者，经c.Next同步执行下游，返回后用c.Response.StatusCode/strconv.Itoa取最终普通响应状态，再WithLabelValues(status).Inc。方法必须POST且FullPath等于已匹配模板/tech-proposal；metrics查询、未知路由及405不在本节范围。标签只有有限状态码，不用task/session/query/raw URL等无界值。Counter是进程内累计增量，不持久化，重启清空；计数表示响应被Handler处理，不代表送达/Workflow成功/实时在途请求或跨进程总量。
+- 恢复顺序：此前Default隐式先登记recovery，本节切New并显式Use(metrics,recovery)，保留同一内置恢复器、让其在计数内层；panic由下游恢复并设置500后返回，计数再读状态，不在异常展开时提前记200。指标方法自身panic不在内层恢复保证内，固定标签避免数量错；仅当前普通响应，不套SSE/已发送最终状态语义。不额外复制8091自定义恢复器。
+- 输出：handler Gather采集注册指标族，出错log+通用500；bytes.Buffer在内存接收expfmt.MetricFamilyToText编码，全部成功后使用expfmt.NewFormat(TypeTextPlain)给Content-Type，c.Data200写字节。官方编码器负责HELP/TYPE/标签转义，不手拼指标、不JSON包字符串、不在每个family后写一份响应。单一固定text0.0.4，不支持OpenMetrics协商、额外Go/process collectors或SDK完整抓取策略；Gather编码失败不返回部分成功指标。
+- Go就地解释：结构体指针与接收者、m.middleware/m.handler方法值捕获同一对象；CounterVec是按标签组合的一组Counter而非单个整数；strconv.Itoa是整数转十进制字符串而非string(int)；Inc调用累加、不启动后台任务。MustRegister与Register(error)替代及作用范围，Gather结果切片/空切片、_忽略写入字节数但检查error，Buffer与之前Builder相同的内存/终端区别、c.Data与c.JSON/c.String区别；错误日志前缀和%v用途就地展开。
+- 教材预验：工作区main/http/workflow/metrics与原测试在modfile副本中test/race/vet/build通过，旧HTTP输入与CLI回归、官方文本解析器核对计数、重复查询/路由排除、独立server注册表、Workflow500、普通panic恢复后的500、32并发累加与8并发抓取、故障Collector触发Gather500均通过。隔离18093真实文本响应正常，起始空；两成功/两400/一413/一415计数准确，重复抓取和非目标方法路径不变，16并发成功后200计数18；原CLI正常，自建进程已停止，用户8092/8091未控制。工作区提前读取状态码的错误副本被测试发现六请求全记200，原教材未改；核心哈希保持不变，临时材料不提交。
+- 代码与运行验收：正式metrics_test.go覆盖初始无序列、六响应精确计数、查询及405/404排除、两个server独立；单独选择标签得到0、Inc后累加且Gather不重置；Workflow500后下一请求200、普通缓冲响应panic恢复500后计数、32并发请求与8并发抓取、故障Collector的Gather通用500/日志。实际包完整test/race/vet/build和gofmt检查通过。原go run CLI成功/空任务行为保留；仅overlay项目http端口的隔离18111真实HTTP，六请求200=2/400=2/413=1/415=1，重复查询与错误方法路径不变，16并发成功后200=18；自建实例已停止，用户8092/8091未控制。提前读取状态码的错误副本被正式测试发现六请求误记200=6；原用户核心hash不变，临时脚本/日志/二进制/overlay不提交。
+- 理解验收：区分创建/注册、按标签选择、Inc加一、Gather收集和expfmt编码；指标不是HTTP业务必需或自动上传，Prometheus客户端库不等监控服务器。标签名与值数量/顺序对应，不同标签组合属于同名指标族，families是族切片而非请求明细。Next返回只表示下游执行返回，不保证客户端收到；外层计数等内层恢复后读取普通500，错误响应也计数。当前只有POST，未增加无区分价值的method标签。
+- Git检查点：提交主题 `feat(metrics): 添加 Workflow HTTP 请求计数`；仅metrics.go、metrics_test.go、http.go、go.mod/go.sum、根计划与examples/README.md；.vscode/settings.json已核对无diff、不强造修改，不push，提交哈希以Git历史为准。
+- 下一步：R.11.2在同一指标对象增加处理耗时Histogram，先解释Observe与累计bucket；不同时引入监控平台或模型。

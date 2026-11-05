@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/hertz/pkg/app"
+	"github.com/cloudwego/hertz/pkg/app/middlewares/server/recovery"
 	"github.com/cloudwego/hertz/pkg/app/server"
 )
 
@@ -70,13 +71,15 @@ func newProposalHandler(workflow compose.Runnable[proposalRequest, proposalResul
 }
 
 func newProposalServer(workflow compose.Runnable[proposalRequest, proposalResult]) *server.Hertz {
-	// 独立教学服务使用Default的内置recovery，不复制8091的自定义中间件。
-	h := server.Default(
+	metrics := newRequestMetrics()
+	h := server.New(
 		server.WithHostPorts("127.0.0.1:8092"),
 		server.WithHandleMethodNotAllowed(true),
 		server.WithSenseClientDisconnection(true),
 	)
-
+	// 显式保持计数在recovery外层，恢复后返回500也能被记录。
+	h.Use(metrics.middleware, recovery.Recovery())
 	h.POST("/tech-proposal", newProposalHandler(workflow))
+	h.GET("/metrics", metrics.handler)
 	return h
 }
