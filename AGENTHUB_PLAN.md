@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1（各自限定教学范围）**
-- 当前小节：**R.12.1 CLI取消演示与错误身份识别已验收；下一小节 R.12.2 errors.As与结构化错误（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2（各自限定教学范围）**
+- 当前小节：**R.12.2 errors.As与结构化输入错误已验收；下一小节按 R.13 并发原语展开（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -534,3 +534,18 @@
 - 理解验收：区分flag定义与Parse解析、*bool类型与*cancelDemo解引用、&变量取地址；flag.Bool返回共享存储地址供解析更新，BoolVar可把已有变量地址交给库。确认%w包装时保留底层错误本身而非只保留说明，errors.Is沿链识别，%v只格式化；当前新增CLI参数与校验、本次ctx取消及错误分类，不把取消误认为panic或关闭服务。
 - Git检查点：提交主题 `feat(workflow): 添加 CLI 取消演示与错误识别`；仅main.go、main_test.go、errors_lesson_test.go、根计划与examples/README.md，节点/HTTP/指标和模块不改。检查相关内容及暂存范围，.vscode已核对无diff、不强造修改，不push，实际哈希以Git历史为准。
 - 下一步：R.12.2用errors.As读取结构化错误信息，继续在已有行为边界上带写，不同时布置新Handler或生产故障策略。
+
+#### R.12.2 errors.As与结构化输入错误
+
+- 状态：已掌握（当前CLI结构化输入错误与As教学范围）；用户main/workflow实现、正式类型/CLI测试、race、vet/build、实际go run和隔离HTTP/指标回归、反证与理解验收通过。未扩展HTTP错误映射或生产错误框架。
+- 用户可见目标：原CLI空task不再仅输出Eino节点诊断，改为输入错误：字段“task” is required；由CLI读取结构化字段生成提示，不拆err.Error文字。正常任务、取消优先、冲突参数与HTTP响应/指标保持。
+- 范围：用户在workflow.go新增proposalInputError(Field/Reason)和指针接收者Error() string，把analyzeTask空task错误换成该类型指针；main仅在原错误分类中增加errors.As分支。没有新路由、依赖、公共错误框架或字段校验抽象；HTTP仍用已验证的自身预检返回原400，本节不借机改变500策略。
+- 类型与必要性：单条错误字符串能显示，但上层无法稳定读取哪个字段与原因；结构体字段解决这一具体信息边界。Error() string满足内置error接口，返回fmt.Sprintf格式文字但不打印或退出。当前只*proposalInputError实现error，节点返回&proposalInputError；Field/Reason与Error文本职责分离，保留task is required文字避免无关旧节点断言变化。节点取消检查仍优先、按原%w返回取消，不把取消伪装为输入错误。
+- 提取语义：errors.Is判断原因身份；errors.As沿错误链查找可赋给目标类型的具体错误并填入目标变量。var inputErr *proposalInputError声明接收位置，初值nil；errors.As(err,&inputErr)传变量地址供函数修改，target类型为**proposalInputError，不是传入已创建的空错误或解引用nil。只在返回true后读inputErr.Field/Reason；err仍是原完整包装错误，不被替换，不解析字符串或直接断言外层类型。
+- 包装与输出：当前Eino节点包装有Unwrap，As能找到底层输入错误；%w继续保留关系，%v仅相同文字会丢失结构类型。CLI保持errors.Is(cancel)优先，然后As输入错误，其他error原通用分支；fmt.Fprintf(os.Stderr,输入错误字段%q原因%s)中%q为Go引用/转义字符串，%s为原因文本，不使用输入作为格式串、不输出任务正文。错误仍exit1，不自动重试或回滚。
+- 教材预验：project-only overlay替换工作区main/workflow与空taskCLI期望及专测，全部旧HTTP/Workflow/Counter/Histogram/取消测试、As专测、race/vet/build通过；节点空/空白task与EinoInvoke可取Field/Reason，额外%w包装保留同一指针，相同文本错误/%v/取消/nil不误匹配。真实go run空task友好stderr+exit status1、正常方案和取消优先保持；隔离18132 HTTP原200/400/405与指标count2通过，临时实例已停。直接类型断言副本被CLI测试发现Eino外层包装导致漏判，%v同文副本被As专测识别类型丢失；用户核心/模块hash未改，临时材料不提交。
+- 正式测试与运行验收：新增input_error_test.go，核对指针方法集合满足error、字段与Error说明、额外%w包装保留同一对象、As不替换外层错误、相同文本/%v/取消/nil不误匹配；节点与Workflow空/空白task都能提取Field/Reason，取消优先，失败后下一次正常Invoke成功。main_test.go仅把空task预期更新为精确新提示，保留原七组正常/取消/优先级/参数冲突覆盖。用户实际包gofmt检查、test/race/vet/build通过；真实go run正常方案、空任务友好stderr与取消优先通过，错误exit1且stdout无方案，go run另报告exit status 1；二进制冲突参数启动前拒绝。
+- 回归与反证：仅overlay项目HTTP端口的隔离18142由实际main启动；HTTP原200/400/405、Counter的200/400各1及Histogram count/+Inf=2、重复抓取不增加指标通过，自建进程已停。工作区直接类型断言副本被正式CLI测试发现漏掉Eino包装内输入错误；%v同文副本被正式类型测试发现结构化信息丢失，随后未overlay的正式包测试再次通过。验收前后用户main/workflow、HTTP/指标及go.mod/go.sum哈希一致，助手未代改核心或升级依赖，临时脚本、overlay、日志和二进制不提交。
+- 概念验收：errors.Is匹配已知错误值而非类型；errors.As按接收变量类型沿链寻找并填入匹配对象指针，不拿接收变量初值比较，也不替换整个外层err。自定义错误仍通过原error返回类型传递，Field/Reason供程序读取，Error方法只生成说明；只有打印需求时errors.New仍足够，本例是结构化信息提取教学，不宣称生产必需。
+- Git检查点：提交主题 `feat(workflow): 添加结构化输入错误与类型提取`；仅main.go、workflow.go、main_test.go、input_error_test.go、根计划与examples/README.md，HTTP/指标及模块不改。检查相关内容与暂存范围，.vscode已核对无diff、不强造修改，不push，实际哈希以Git历史为准。
+- 下一步：完成结构化错误小节后按R.13并发原语展开，不同时加入持久化、模型或新的生产故障策略。

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -22,6 +21,16 @@ type proposalResult struct {
 	Content string
 }
 
+// 输入错误携带字段和原因，供入口按类型读取，不依赖拆解错误文字。
+type proposalInputError struct {
+	Field  string
+	Reason string
+}
+
+func (e *proposalInputError) Error() string {
+	return fmt.Sprintf("%s %s", e.Field, e.Reason)
+}
+
 func analyzeTask(
 	ctx context.Context,
 	input proposalRequest,
@@ -31,7 +40,10 @@ func analyzeTask(
 	}
 	task := strings.TrimSpace(input.Task)
 	if task == "" {
-		return taskAnalysis{}, errors.New("task is required")
+		return taskAnalysis{}, &proposalInputError{
+			Field:  "task",
+			Reason: "is required",
+		}
 	}
 
 	return taskAnalysis{

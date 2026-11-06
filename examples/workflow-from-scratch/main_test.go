@@ -43,7 +43,7 @@ func TestWorkflowCLIArgumentsAndCancellation(t *testing.T) {
 		{"cancel", []string{"-cancel-demo"}, 1, "", "任务已取消\n", true},
 		{"cancel_true", []string{"-cancel-demo=true"}, 1, "", "任务已取消\n", true},
 		{"cancel_before_task_validation", []string{"-cancel-demo", "-task", " "}, 1, "", "任务已取消\n", true},
-		{"blank_task", []string{"-task", " "}, 1, "", "task is required", false},
+		{"blank_task", []string{"-task", " "}, 1, "", "输入错误：字段 \"task\" is required\n", true},
 		{"conflicting_modes", []string{"-serve", "-cancel-demo"}, 1, "", "参数错误：-cancel-demo 仅用于 CLI，不能与 -serve 同时使用\n", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -55,8 +55,17 @@ func main() {
 	// 正常或错误返回都释放本次ctx；os.Exit不会执行defer，因此在分支前调用。
 	cancel()
 	if err != nil {
+		var inputErr *proposalInputError
 		if errors.Is(err, context.Canceled) {
 			fmt.Fprintln(os.Stderr, "任务已取消")
+		} else if errors.As(err, &inputErr) {
+			// 只读取已确认的输入错误字段；不把所有内部故障都当作输入错误。
+			fmt.Fprintf(
+				os.Stderr,
+				"输入错误：字段 %q %s\n",
+				inputErr.Field,
+				inputErr.Reason,
+			)
 		} else {
 			fmt.Fprintln(os.Stderr, "执行失败：", err)
 		}
