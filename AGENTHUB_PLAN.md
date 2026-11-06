@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2（各自限定教学范围）**
-- 当前小节：**R.11.2 处理耗时 Histogram已验收；下一小节 R.12.1 接口与错误链（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1（各自限定教学范围）**
+- 当前小节：**R.12.1 CLI取消演示与错误身份识别已验收；下一小节 R.12.2 errors.As与结构化错误（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -518,3 +518,19 @@
 - 理解验收：确认0.005秒样本同时被le=0.01和le=0.1等更大累计桶包含，但count只增加一次；从全零状态Observe(0.005)后count=1、sum=0.005。区分时间点与时长、Seconds换算和Observe更新，按指标名字归族而非按每个耗时创建族；bucket是小于等于上界的累计次数，不是相邻阈值区间。
 - Git检查点：提交主题 `feat(metrics): 添加 Workflow HTTP 处理耗时指标`；仅metrics.go、metrics_test.go、duration_test.go、go.mod、根计划与examples/README.md。client_model仅因正式测试直接导入而归为直接依赖，版本未升级，go.sum无变化；.vscode已核对无diff，不强造修改，不push，实际哈希以Git历史为准。
 - 下一步：R.12.1在现有Workflow CLI演示取消并用errors.Is识别包装错误，补error接口与%w错误链理解；不同时加入监控平台或模型。
+
+### R.12 接口与错误链（分阶段）
+
+#### R.12.1 CLI取消演示与错误身份识别
+
+- 状态：已掌握（当前CLI取消与错误链教学范围）；用户main实现、正式CLI/接口链测试、race、vet/build、实际go run和隔离HTTP回归、理解验收通过。未实现errors.As结构化业务错误或完整生产取消策略。
+- 用户可见目标：保留原CLI/HTTP，在CLI增加-cancel-demo，执行前取消本次上下文，退出码1且stderr输出任务已取消、stdout无方案；普通空任务仍显示执行失败；与-serve同时使用时在启动前报参数错误，避免静默忽略。
+- 范围：用户只改examples/workflow-from-scratch/main.go，新增errors导入、flag.Bool、互斥参数校验、CLI执行ctx及errors.Is分支；节点/HTTP/指标/模块不改，不新建业务接口或错误封装层，不给所有错误做取消映射。errors.As和自定义业务错误后续另节展开。
+- 生命周期：Background只用于一次Workflow构建；HTTP分支维持原Spin/return和每请求ctx。CLI使用context.WithCancel(ctx)返回runCtx和cancel函数；演示参数为true时在Invoke前cancel，Invoke仍调用一次、可在框架入口直接识别取消，不保证一定进入analyzeTask。返回后在错误分支前显式cancel释放资源；os.Exit不执行defer，取消函数可重复调用但不能恢复已取消ctx。
+- 语法与接口：error是内置Error() string接口，满足方法集合的类型隐式实现，不使用implements；errors.New、fmt.Errorf返回满足该接口的具体错误值，字符串本身不是error。%w在fmt.Errorf中保留底层错误与说明前缀，%v仅格式化；示例文本相同不意味着错误身份或链相同。现有节点analyze task/build proposal前缀表示失败阶段，节点方法原码不改。
+- 错误分类：err!=nil只判断发生错误；errors.Is(err,context.Canceled)寻找取消错误身份，包含可解包链而非比较文本；直接==只比较外层，包装后会漏判。已取消执行返回error不等panic，不靠cancel结束服务；识别后返回CLI友好消息，其他错误保留原诊断。当前框架可能在执行节点前返回取消，示意节点错误链与实际框架错误分清。
+- 教材预验：仅项目路径overlay到工作区main及临时tests，旧Workflow/HTTP/Counter/Histogram和接口链test/race/vet/build通过。原go run正常去空白任务输出保持；go run -cancel-demo为任务已取消加go run的exit status 1，二进制只友好消息且exit1；空任务原失败、互斥参数启动前拒绝均通过。测试最小Error方法类型隐式赋给error、相同文本非取消、%w与%v文本一致但身份不同、节点和Workflow取消链；%w改%v副本被测试发现链断，合法额外包装下直接==副本误落普通失败。用户main/节点/HTTP/指标与模块hash不变，未启动网络实例，临时证据不提交。
+- 代码与运行验收：正式errors_lesson_test.go核对最小Error方法隐式接口、相同文字非相同身份、%w保留/%v断链、额外包装及节点/Workflow取消链；main_test.go在隔离测试子进程调用真实main，七组normal/cancel false/cancel/cancel true/取消优先空任务/普通空任务/冲突模式核对stdout、stderr和退出码，错误分类和参数冲突不启动服务。实际包gofmt/test/race/vet/build全部通过，原go run正常输出与取消友好消息（go run另报告exit status 1）通过，二进制空任务和冲突参数正确。仅overlay项目端口的隔离18131由用户main启动HTTP，200/400/405、Counter与Histogram count=2及重复查询不变，自建进程已停。直接==再加合法错误包装的副本被正式CLI测试发现取消误落普通失败；节点%w改%v副本被正式链测试识别；用户main/节点/HTTP/指标/模块hash验证前后不变，临时证据不提交。
+- 理解验收：区分flag定义与Parse解析、*bool类型与*cancelDemo解引用、&变量取地址；flag.Bool返回共享存储地址供解析更新，BoolVar可把已有变量地址交给库。确认%w包装时保留底层错误本身而非只保留说明，errors.Is沿链识别，%v只格式化；当前新增CLI参数与校验、本次ctx取消及错误分类，不把取消误认为panic或关闭服务。
+- Git检查点：提交主题 `feat(workflow): 添加 CLI 取消演示与错误识别`；仅main.go、main_test.go、errors_lesson_test.go、根计划与examples/README.md，节点/HTTP/指标和模块不改。检查相关内容及暂存范围，.vscode已核对无diff、不强造修改，不push，实际哈希以Git历史为准。
+- 下一步：R.12.2用errors.As读取结构化错误信息，继续在已有行为边界上带写，不同时布置新Handler或生产故障策略。
