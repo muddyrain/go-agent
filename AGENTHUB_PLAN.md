@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2（各自限定教学范围）**
-- 当前小节：**R.12.2 errors.As与结构化输入错误已验收；下一小节按 R.13 并发原语展开（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1（各自限定教学范围）**
+- 当前小节：**R.13.1 goroutine启动与等待完成已验收；下一小节 R.13.2 共享会话计数与Mutex（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -549,3 +549,21 @@
 - 概念验收：errors.Is匹配已知错误值而非类型；errors.As按接收变量类型沿链寻找并填入匹配对象指针，不拿接收变量初值比较，也不替换整个外层err。自定义错误仍通过原error返回类型传递，Field/Reason供程序读取，Error方法只生成说明；只有打印需求时errors.New仍足够，本例是结构化信息提取教学，不宣称生产必需。
 - Git检查点：提交主题 `feat(workflow): 添加结构化输入错误与类型提取`；仅main.go、workflow.go、main_test.go、input_error_test.go、根计划与examples/README.md，HTTP/指标及模块不改。检查相关内容与暂存范围，.vscode已核对无diff、不强造修改，不push，实际哈希以Git历史为准。
 - 下一步：完成结构化错误小节后按R.13并发原语展开，不同时加入持久化、模型或新的生产故障策略。
+
+### R.13 并发原语（分小节）
+
+#### R.13.1 goroutine启动与等待完成
+
+- 状态：已掌握（当前两个固定模拟任务的启动与等待教学范围）；用户main实现、正式测试、race/vet/build、真实入口运行、反证与理解验收通过。未扩展到共享数据锁、channel通信或生产后台任务生命周期。
+- 用户可见目标：运行两个固定模拟任务，A等待1秒、B等待2秒，看到开始/完成消息交错，两个任务都完成后才输出main总结；普通调用串行约3秒、并发等待通常接近较慢任务的2秒，仅为模拟观察，不承诺生产加速比或固定完成次序。
+- 范围：只由用户新建examples/concurrency-from-scratch/main.go，复用根go.mod，不改已有HTTP、Workflow、SessionStore或生产MCP。本节先把启动/等待生命周期拆开观察；后续再回到共享会话计数的Mutex问题，不为目录整齐预建框架或多层接口。
+- 调用链：main记录起点并声明局部WaitGroup，Add(2)登记两个任务后用两次go func()启动；各goroutine同步调用simulateTask，defer Done在对应函数退出时减计数；main在Wait阻塞至计数为0，再输出总耗时并返回。
+- 标准库与语法：sync.WaitGroup零值可用，Add(int)登记未完成数量、Done()减1、Wait()无参数返回值且只等待登记的任务，不是锁、不是收集错误或强杀任务；首次Add必须在启动前，使用后不复制。go是语言关键字，不是标准库；func(){...}是匿名函数、后接()表示调用，go让调用独立进行。time.Duration是时长类型，time.Second及2*time.Second是带单位的时长；Sleep只阻塞当前goroutine至少该时长、不感知ctx，示例不用于真实HTTP。Now/Since/Seconds与fmt的%s、%.2f和换行就地复习。
+- 替代写法：普通simulateTask调用会串行；只加go不等待会让main提前退出；固定Sleep猜测完成不可靠。Go1.25起可用wg.Go(func(){...})自动登记/启动/函数返回减计数，替代Add/go/defer Done而不是叠加，函数不得panic；本节保留显式写法以观察每步职责，项目版本可用，替代稿也已测试。
+- 教材预验：工作区文件列表方式在根模块下test/race/vet/build与真实go run通过；真实输出六行，两个任务各开始/完成一次且总结在最后。临时测试用标准库testing/synctest虚拟时钟验证重叠等待为2秒，不靠机器负载上限；删Wait反证检测到main耗时0并总结过早，真实进程未等任务；去go反证检测到串行3秒；wg.Go替代测试通过。既有核心及模块哈希保持，临时夹具/脚本/二进制不提交，不把教材预验当用户实现验收。
+- 正式验证：新增main_test.go，使用testing/synctest虚拟时钟调用实际main，核对两条模拟等待重叠为2秒、每个任务开始/完成各一次、任务内部顺序与main总结在最后，不断言独立goroutine的启动次序；单独验证simulateTask零/负时长立即返回及250毫秒时长。测试捕获stdout且不并行，漏Wait反证夹具也让固定任务收尾后才恢复stdout。用户包gofmt检查、test/race/vet/build与真实go run目录入口通过；命令级GOMAXPROCS=1运行仍为两秒重叠等待，不修改全局配置或将其作为必须并行运行的证明。
+- 反证与变体：只overlay项目main副本，删除Wait被正式测试发现main耗时0且总结过早；去掉两处go被发现串行3秒；Add(3)真实二进制完成两任务后仍剩计数1，运行时报告deadlock、退出码2且不输出全部完成。本场景死锁不推广为所有服务中的计数不匹配都会自动报告。助手工作区A改3秒/B仍2秒运行得到约3秒，未改Wait，基础用户main保持1秒/2秒；仅记为助手验证，不替代独立练习证据。反证后未overlay正式测试再次通过，用户核心与既有Workflow/HTTP/指标、go.mod/go.sum哈希不变，未启动服务，临时文件不提交。
+- 概念验收：go启动goroutine，不等同于直接创建操作系统线程；调用方继续执行，goroutine内部普通调用仍顺序运行。WaitGroup不是必须随每个go出现，只有需要协调完成时才选用等待机制；wg是等待组，Wait方法等登记计数归零，不创建或自动登记任务。Add数量要与完成通知对应，不会多启动任务；defer Done绑定当前匿名函数退出，报告完成而非停止任务。main返回不自动等其他goroutine，不能把背景任务自己执行理解为main自动等待。
+- 官方参考：https://go.dev/ref/spec（go语句、匿名函数、main返回）；https://pkg.go.dev/sync（WaitGroup方法与限制）；https://pkg.go.dev/time（Duration/Sleep/Now/Since/Seconds）；方法契约另对照本机标准库核实，不按滚动版本升级项目。
+- Git检查点：提交主题 `feat(concurrency): 添加 goroutine 启动与等待示例`；仅用户main.go、助手main_test.go、根计划与examples/README.md，检查敏感内容及暂存范围，不push，.vscode已检查无diff、不强造修改；实际哈希以Git历史为准。
+- 下一步：R.13.2对照已有sessionStore的共享读改写与Mutex；本轮不同时布置channel/select、Once或生产并发改造。
