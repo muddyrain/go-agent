@@ -30,4 +30,6 @@ func main() {
 	fmt.Println("main：已启动两个任务，等待完成")
 	wg.Wait()
 	fmt.Printf("main：全部完成，总耗时 %.2f 秒\n", time.Since(started).Seconds())
+
+	runMutexDemo()
 }

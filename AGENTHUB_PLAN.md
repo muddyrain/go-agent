@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1（各自限定教学范围）**
-- 当前小节：**R.13.1 goroutine启动与等待完成已验收；下一小节 R.13.2 共享会话计数与Mutex（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2（各自限定教学范围）**
+- 当前小节：**R.13.2 共享计数与Mutex已验收；下一小节 R.13.3 channel结果传递（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -567,3 +567,21 @@
 - 官方参考：https://go.dev/ref/spec（go语句、匿名函数、main返回）；https://pkg.go.dev/sync（WaitGroup方法与限制）；https://pkg.go.dev/time（Duration/Sleep/Now/Since/Seconds）；方法契约另对照本机标准库核实，不按滚动版本升级项目。
 - Git检查点：提交主题 `feat(concurrency): 添加 goroutine 启动与等待示例`；仅用户main.go、助手main_test.go、根计划与examples/README.md，检查敏感内容及暂存范围，不push，.vscode已检查无diff、不强造修改；实际哈希以Git历史为准。
 - 下一步：R.13.2对照已有sessionStore的共享读改写与Mutex；本轮不同时布置channel/select、Once或生产并发改造。
+
+#### R.13.2 共享计数与Mutex
+
+- 状态：已掌握（当前共享计数与Mutex教学范围）；用户有锁实现、正式计数/独立调用与旧等待测试、race/vet/build、真实入口、反证及理解验收通过。未改已验收会话存储或生产并发策略。
+- 用户可见目标：保留R.13.1默认两任务输出，在其后运行四个goroutine，每个对同一个total加一1000次，完成后输出共享计数期望4000/实际4000；使用-race核对本次路径。取消保护但保留WaitGroup的副本可检测竞争，普通运行偶尔得到4000不能证明没有竞争。
+- 范围：用户新增examples/concurrency-from-scratch/mutex_demo.go的runMutexDemo，并在既有main总结后增加一次调用；无新CLI参数或依赖，原simulateTask/等待实验不改。对照examples/hertz-from-scratch/session_store.go的Lock/递增/return/defer Unlock，不修改已验收HTTP、共享会话或生产MCP。
+- 具体问题：WaitGroup只等任务报告结束，不能排斥任务之间对同一变量的冲突访问；total++概念上为读取旧值、加一、写回，不保证不可分割。多个任务可覆盖彼此更新。用同一Mutex协调完整读改写，不是锁变量自动保护内存，所有并发访问者必须遵循同一保护约定。
+- 调用链：runMutexDemo创建本次局部total、mu和wg，Add(workers)后循环启动四个任务，每任务有本地循环i，defer Done通知结束；每次mu.Lock→total++→mu.Unlock。主调用者wg.Wait后才读total和打印，此时所有写入结束，不需要再给该最终读加锁；执行中读取则也需同步。本次调用的任务共用一把锁和一个total，不复制锁或每任务新建锁。
+- Go语法与标准库：const声明固定数量，var total int零值0，var mu sync.Mutex零值未锁定且可用；Lock/Unlock无参数和返回值，Lock在已占用时阻塞当前调用者直至可用，不取消或回滚，Unlock释放锁供下一次获取；使用后不复制，不能在持有同一非可重入Mutex时重复Lock。for初始化/条件/递增、两个循环局部变量、++和%d格式按当前代码就地解释。
+- 锁范围与defer：本例每次加一后立即Unlock，不把defer Unlock直接写在长循环体里；defer绑定外围函数退出，不在每轮末执行，会导致下一轮仍持锁再Lock。已有nextTurn函数只一次Lock并立刻defer Unlock，完整递增与返回值求值都在锁内，函数退出时解锁；显式末尾Unlock是可行替代但多return时更容易漏。若整个worker循环前Lock、函数退出defer Unlock，计数也正确但整个worker串行，不把无关I/O/Sleep放入锁区。
+- 教材预验：project-only overlay工作区main/mutex_demo及旧main_test兼容副本与十次计数专测；完整test/race/vet/build、真实目录入口七行输出且计数4000通过。去锁副本正式测试/race和真实go run-race发现DATA RACE，计数测试观察到丢更新；真实一次去锁运行虽实际4000仍报警。整worker锁替代race测试通过；既有用户main/测试/sessionStore及模块hash保持，临时脚本/overlay/二进制不提交。
+- 正式验证：新增mutex_demo_test.go，十次重复调用均精确输出期望/实际4000，八次并发独立调用各有自己的total/Mutex并得到4000；测试等待全部任务后恢复stdout，不并行运行捕获夹具。main_test只扩展为原六行行为后追加一行计数，保留虚拟时钟两秒等待、任务内部顺序和零/负/250毫秒时长断言。用户包gofmt检查、test/race/vet/build、真实go run与go run-race全部通过，计数4000且无竞态警告；范围仅当前包，不宣称全生产仓库验收。
+- 反证：仅overlay项目mutex_demo工作区副本；去锁但保留WaitGroup被正式计数测试和真实-race入口检测到DATA RACE；每个goroutine各自创建Mutex也被正式race测试发现同一total竞争，证明不同锁无法互斥；漏Unlock真实副本在本独立程序报告deadlock且无计数结果。预验中存在去锁仍输出4000但报警的运行，数字碰巧正确不等安全。反证后正式无overlay race测试再次通过；用户main/mutex_demo、既有HTTP/sessionStore/Workflow及模块哈希验收前后不变，临时文件不提交、未启动服务。
+- 概念验收：Mutex不自动锁变量，控制同一把锁的获取；锁内可以有多个相关共享变量，但其他并发访问者也须使用相同同步约定，绕过锁仍可竞争。拿到锁的执行临界区，争用者停在Lock，无关goroutine继续；Lock无自动超时，持锁Sleep不释放锁，等Sleep结束执行Unlock才让出锁。defer绑定函数退出不等循环轮次，当前逐次更新立即Unlock；最终Wait后读已与写错开。用户已恢复有锁且无Sleep的基础实现，未把实验诊断或对话写入仓库。
+- 范围边界：仅当前四个固定计数任务，不做生产线程池、通用计数API、RWMutex/atomic/Once/channel或全局锁改造；已有nextTurn锁内读取与返回仅作对照，不代改核心。
+- 官方参考：https://pkg.go.dev/sync（Mutex与WaitGroup）；https://go.dev/doc/articles/race_detector（竞争检测与只覆盖执行路径）；本机标准库源码另核对，滚动文档不作为升级理由。
+- Git检查点：提交主题 `feat(concurrency): 添加 Mutex 共享计数示例`；仅main.go、mutex_demo.go、main_test.go、mutex_demo_test.go、根计划及examples/README.md，检查敏感内容与暂存范围，.vscode已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
+- 下一步：R.13.3用channel传递结果，再解释select如何协调就绪与取消；本轮不提前布置实现。

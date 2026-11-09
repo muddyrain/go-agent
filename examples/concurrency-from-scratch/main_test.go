@@ -50,8 +50,10 @@ func TestGoroutineLessonWaitsForBothTasks(t *testing.T) {
 				t.Fatalf("task completion preceded start: %q", output)
 			}
 		}
-		if !strings.HasSuffix(output, "main：全部完成，总耗时 2.00 秒\n") || strings.Count(output, "\n") != 6 {
-			t.Fatalf("summary must follow both completions: %q", output)
+		summary := "main：全部完成，总耗时 2.00 秒\n"
+		count := "共享计数：期望 4000，实际 4000\n"
+		if !strings.HasSuffix(output, summary+count) || strings.Count(output, "\n") != 7 {
+			t.Fatalf("task summary must precede the completed mutex demo: %q", output)
 		}
 	})
 }
