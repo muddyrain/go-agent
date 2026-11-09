@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2（各自限定教学范围）**
-- 当前小节：**R.13.2 共享计数与Mutex已验收；下一小节 R.13.3 channel结果传递（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3（各自限定教学范围）**
+- 当前小节：**R.13.3 channel结果传递已验收；下一小节 R.13.4 select等待与取消（未开始）。**
 
 ### R.1 最小 HTTP 服务
 
@@ -585,3 +585,20 @@
 - 官方参考：https://pkg.go.dev/sync（Mutex与WaitGroup）；https://go.dev/doc/articles/race_detector（竞争检测与只覆盖执行路径）；本机标准库源码另核对，滚动文档不作为升级理由。
 - Git检查点：提交主题 `feat(concurrency): 添加 Mutex 共享计数示例`；仅main.go、mutex_demo.go、main_test.go、mutex_demo_test.go、根计划及examples/README.md，检查敏感内容与暂存范围，.vscode已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
 - 下一步：R.13.3用channel传递结果，再解释select如何协调就绪与取消；本轮不提前布置实现。
+
+#### R.13.3 channel结果传递
+
+- 状态：已掌握（当前固定四份整数结果的无缓冲channel教学范围）；用户基础实现、正式结果/独立调用及旧课程测试、race/vet/build、真实入口和反证、理解验收通过。未加入select、关闭通道流协议或发送后收尾等待。
+- 用户可见目标：保留R.13.1等待与R.13.2有锁计数，再追加四条收到1000的结果消息和期望/实际4000汇总。四任务不共同改total，而是各自局部count完成后发送一个整数，接收方独占汇总，学习通信与等待的具体用途，不宣称比Mutex更快或应替换所有锁。
+- 范围：用户新增examples/concurrency-from-scratch/channel_demo.go的runChannelDemo，在main的runMutexDemo之后追加调用；复用根模块，无新依赖、CLI参数、HTTP/Workflow/会话存储改造。只引入无缓冲chan int、make、发送和固定次数接收；不同时布置select、方向类型参数、close/range流协议或生产流水线。
+- 调用链：函数先make(chan int)创建本次共用通道，循环启动四个goroutine，各自创建count并加一1000次，最后results <- count；调用方执行四次value := <-results，每次total += value并打印收到序号，四值汇总后返回。received是接收序号，不代表worker编号，独立任务的到达次序不保证。
+- 语法与阻塞：chan int是元素为int的通道类型，不是goroutine；make是内置函数，返回已初始化chan int，var results chan int仅为nil、发送接收会阻塞。results <- count是发送，value := <-results是接收；无缓冲通道没有暂存队列，通信需要发送/接收两侧配对，先到者等待；一个值由一次接收取走，不广播。局部count仅所属任务改，total仅接收方改，通道可并发使用，因此不需要Mutex协调共同写入。
+- 完成边界：接收四份结果保证四个任务的计算与结果交付已到该点，不等同于等待它们后续代码或defer全部退出；本节发送为最后一条业务语句，无发送后资源操作、打印或共享修改，所以不另加WaitGroup。若以后需要发送后清理完成，须显式完成协调。不能先用Wait等无缓冲发送者结束再开始收，会互相等待；也不能去掉go导致当前调用者在第一次发送卡住而到不了接收循环。
+- 协议边界：固定四发送/四接收，无close也可完成；close不是每个goroutine结束都必须执行的清理，不能让任意一个发送者过早关闭共同通道。本节不执行range结果，否则未关闭无法结束；收多一次没有发送方会阻塞，本独立副本可报告死锁。缓冲make(chan int,workers)可让四份值暂存，但容量不是自动次数或结束通知，缓冲替代仅讲明语义影响不要求改写。
+- 教材预验：project-only overlay工作区main/channel_demo/新结果测试及旧main_test兼容副本，旧等待/时长/Mutex测试和十次结果、八次并发独立调用test/race/vet/build通过；真实go run及-race为十二行、末五行为四结果与4000汇总。total赋值替代累加被测试发现结果1000；第五次接收及去go的真实副本报告deadlock；缓冲四值替代通过race测试，随后基础race重跑通过。用户既有核心/测试和模块hash不变，临时脚本、overlay、二进制不提交，不把预验当用户验收。
+- 正式验证：新增channel_demo_test.go，十次重复调用每次严格收到四份1000并汇总4000，八次并发独立调用使用各自results/total，逐行次数与总行数正确，不依赖任务编号或独立调用间日志顺序。扩展main_test的尾部预期为原七行后追加五行，保留两秒重叠等待、每任务开始/完成与Mutex计数、零/负/250毫秒时长断言。用户包gofmt检查、test/race/vet/build、真实go run及-race通过；十二行结果正确且无竞态警告。
+- 正式反证：仅overlay项目channel_demo副本，total赋值而非累加被正式结果测试发现汇总1000；多接收一次、注释发送、去掉发送方go的真实二进制均在本独立程序报告deadlock且无channel汇总。助手副本increments改500仍四接收、每份500/汇总2000，基础用户代码未变，仅记助手验证不替代独立练习。反证后无overlay race再次通过，用户main/channel/mutex、旧测试与HTTP/Workflow/会话及模块验收哈希保持，临时材料不提交、未启动服务。
+- 概念验收：发送/接收箭头与阻塞配对确认；第一循环只启动任务不等其结束，第一循环之后当前调用方进入第二循环，与独立goroutine并发。接收方内部接收→累加→打印顺序固定，跨goroutine发送后/接收后代码没有固定打印次序；打印收到数据不等同刚完成交接，日志先后不能推断所有任务退出。发送后语句不被channel丢弃，main返回不等其他goroutine，结果交接不保证后续日志/清理完成；需要收尾保证时应先收数据再等任务退出，不强制所有发送放最后。total只有接收方修改，不是channel自动锁变量。基础结果版已由用户恢复，最终无发送后实验日志，不重复追问已确认概念。
+- 边界与Git检查点：只验收当前四份结果教学包，不宣称通用channel库或生产改造完成；提交主题 `feat(concurrency): 添加 channel 结果传递示例`，仅main.go、channel_demo.go、main_test.go、channel_demo_test.go、根计划及examples/README.md，核对敏感内容与暂存范围，.vscode已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
+- 官方参考：https://go.dev/ref/spec（Channel types、Making slices maps and channels、Send statements、Receive operator、Go statements）；本节使用既有语言规则，不依赖滚动版本新增语法。
+- 下一步：R.13.4基于一个需要等待或取消的场景讲select；本轮不同时要求实现。

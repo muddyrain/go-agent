@@ -32,4 +32,6 @@ func main() {
 	fmt.Printf("main：全部完成，总耗时 %.2f 秒\n", time.Since(started).Seconds())
 
 	runMutexDemo()
+
+	runChannelDemo()
 }
