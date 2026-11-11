@@ -37,8 +37,8 @@ func TestGoroutineLessonWaitsForBothTasks(t *testing.T) {
 			t.Fatal(err)
 		}
 		output := string(data)
-		if elapsed != 2*time.Second {
-			t.Fatalf("main elapsed=%v; want overlapping waits totaling 2s; output=%q", elapsed, output)
+		if elapsed != 2200*time.Millisecond {
+			t.Fatalf("main elapsed=%v; want 2s task wait plus 200ms select demonstrations; output=%q", elapsed, output)
 		}
 		for _, line := range []string{"任务A：开始\n", "任务A：完成\n", "任务B：开始\n", "任务B：完成\n", "main：已启动两个任务，等待完成\n"} {
 			if strings.Count(output, line) != 1 {
@@ -52,8 +52,8 @@ func TestGoroutineLessonWaitsForBothTasks(t *testing.T) {
 		}
 		summary := "main：全部完成，总耗时 2.00 秒\n"
 		count := "共享计数：期望 4000，实际 4000\n"
-		if !strings.HasSuffix(output, summary+count+channelDemoWant) || strings.Count(output, "\n") != 12 {
-			t.Fatalf("previous demonstrations must precede the channel results: %q", output)
+		if !strings.HasSuffix(output, summary+count+channelDemoWant+selectDemoWant) || strings.Count(output, "\n") != 14 {
+			t.Fatalf("previous demonstrations must precede the select output: %q", output)
 		}
 	})
 }

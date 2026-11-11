@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3（各自限定教学范围）**
-- 当前小节：**R.13.3 channel结果传递已验收；下一小节 R.13.4 select等待与取消（未开始）。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3、R.13.4（各自限定教学范围）**
+- 当前小节：**R.13.4 select等待与取消已验收；下一步回看并发原语适用边界，按实际缺口继续R.13，不同时布置R.14实现。**
 
 ### R.1 最小 HTTP 服务
 
@@ -602,3 +602,22 @@
 - 边界与Git检查点：只验收当前四份结果教学包，不宣称通用channel库或生产改造完成；提交主题 `feat(concurrency): 添加 channel 结果传递示例`，仅main.go、channel_demo.go、main_test.go、channel_demo_test.go、根计划及examples/README.md，核对敏感内容与暂存范围，.vscode已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
 - 官方参考：https://go.dev/ref/spec（Channel types、Making slices maps and channels、Send statements、Receive operator、Go statements）；本节使用既有语言规则，不依赖滚动版本新增语法。
 - 下一步：R.13.4基于一个需要等待或取消的场景讲select；本轮不同时要求实现。
+
+#### R.13.4 select等待与取消
+
+- 状态：已掌握（当前单任务结果等待教学范围）；用户核心与全部实验入口已保存，理解确认完成，正式测试/真实入口及取消与收尾反证通过。
+- 用户可见目标：保留前几节实验，在main最后运行一次可取消结果等待的成功/超时对照；正常模拟100毫秒交付42，100毫秒期限下等待1秒工作返回期限错误并确认后台任务已退出，不因接收方放弃导致无缓冲发送卡住。
+- 范围：用户新增examples/concurrency-from-scratch/select_demo.go，核心waitForNumber(ctx,delay)(int,error)与runSelectDemo两次对照调用，main最后仅追加runSelectDemo。无CLI参数、模型、HTTP、共享会话或依赖改造；Timer只模拟工作就绪，不是实际I/O和生产性能阈值，不加入close/range或一般线程池。
+- 调用链：入口先ctx.Err拒绝已取消任务；创建本次results和WaitGroup，启动一次worker。worker先Timer/ctx.Done的select等待工作就绪，再results发送/ctx.Done的select交付或退出；调用方用接收/ctx.Done的select返回42或%w包装取消原因，defer wg.Wait保证返回前worker的完成通知与Timer.Stop已发生。
+- 必要性：普通channel接收不能同时响应取消；只把接收改为select而让worker普通发送仍可能卡住。两个阻塞阶段都需取消出口，取消只通知不强杀；Wait只确认协作收尾，不产生取消或强制时限，后台若不响应仍会拖延返回。这里新增完成等待解决已复现的接收后任务未收尾边界，不为目录整齐堆封装。
+- 语法：select是语言语法、case必须为发送/接收通信，没default时等至少一个可执行分支，只执行一个，多个同时就绪不按源码优先。本节select没有自动循环或执行其他case；空timer.C分支完成接收并继续后续代码，不表示不等待。ctx.Done是取消时关闭的信号通道，不携带error；ctx.Err读取Canceled/DeadlineExceeded，须在取消分支或已取消预检中读；cancel不等待任务退出。已取消入口优先拒绝，运行中就绪与取消竞争不承诺严格取消优先。
+- Timer与资源：NewTimer(delay)创建一次通知并返回*Timer，不阻塞构造；等待在接收timer.C或select中。defer Stop在worker退出停止尚未触发的timer，返回bool本节不依赖；不靠Stop关闭C或终止goroutine，停止后不再读该通道。Done先登记、Stop后登记，defer逆序让Timer.Stop先于wg.Done；外层defer Wait在函数返回前执行，不把取消结果仅返回而留下未收尾的worker。
+- 示例入口：第一调用Background与100毫秒delay取得42；第二WithTimeout(Background,100毫秒)并defer cancel，delay1秒，errors.Is(DeadlineExceeded)显示等待超时/后台任务已退出。value,err第二次用=复用，不用:=无新变量；%w说明wait for number阶段并保留原因，错误由核心返回、演示入口打印，核心不Exit、不打印诊断或按文本匹配。
+- 教材预验：此前工作区project-only overlay的成功/期限/手动取消/已取消/独立调用与示例测试、race/vet/build、真实入口和取消反证通过；这一步仅验证教材，不代替下列用户实现正式验收，临时材料不提交。
+- 正式测试：助手新增select_demo_test.go，覆盖零/负/100毫秒工作成功、100毫秒期限、50毫秒手动取消、入口已取消、%w阶段错误链、成功不取消传入ctx及八次成功/超时混合独立调用。复用既有stdout夹具且不t.Parallel；保留全部旧任务/Mutex/channel测试，main_test保留首段2.00秒总结，整main虚拟耗时更新为2.2秒和十四行。
+- 正式验证：本教学包格式检查、go test -mod=readonly、go test -mod=readonly -race、go vet -mod=readonly、临时路径go build -mod=readonly与git diff --check通过；真实go run和go run -race均十四行，旧共享计数和channel汇总4000，最后收到42/等待超时，stderr空。只检查本课并发包，不声称全仓库测试完成。
+- 正式反证：仅overlay实际select核心的工作区副本，删工作等待取消使返回拖到1秒，被正式期限测试发现；删外层接收取消出现synctest死锁。测试专用发送前延迟到接收方取消后，原发送select能够退出，普通发送死锁；测试专用交付后的200毫秒收尾延迟，原defer Wait等到201毫秒，删Wait仅1毫秒返回被探针发现。探针延迟不进入业务核心。助手另把第二次工作缩为10毫秒，实际二进制改为成功收到42，仅记助手变体验证、不冒充独立练习。之后无overlay race再次通过，核心、旧实验、模块与既有服务文件哈希保持，所有临时进程已结束，未启动服务。
+- 概念边界：Done是取消通知而非业务完成；匿名函数return只退出worker，外层取消分支读取ctx.Err并返回包装错误，调用方Is识别。WithTimeout期限触发本例超时，defer cancel仅释放资源；Wait仅等完成计数不自动返回外层函数，Done位置决定完成语义。本例defer Wait是准备return时的统一等待，不另开goroutine、没有内置超时、归零后不回到select；正式理解验收已完成，不重复追问。
+- Git检查点：主题 `feat(concurrency): 添加 select 等待取消与任务收尾示例`；只含main.go、select_demo.go、main_test.go、select_demo_test.go、根计划与examples/README.md。核对敏感内容与暂存范围，.vscode/settings.json无diff、不强造修改，不push；实际提交哈希以Git历史为准。
+- 官方参考：https://go.dev/ref/spec（Select statements）；https://pkg.go.dev/context（Done/Err/WithTimeout/CancelFunc）；https://pkg.go.dev/time（NewTimer/Stop）；https://pkg.go.dev/sync（WaitGroup/Wait/Done）；另核对本机标准库，不用滚动文档升级依赖。
+- 下一步：按R.13现有计划回看并发原语的适用边界，再按实际缺口决定Once/Timer/Ticker是否另补小节；不因API清单预先堆生产设施，不同时布置R.14实现。

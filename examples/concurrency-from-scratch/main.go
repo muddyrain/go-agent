@@ -34,4 +34,6 @@ func main() {
 	runMutexDemo()
 
 	runChannelDemo()
+
+	runSelectDemo()
 }
