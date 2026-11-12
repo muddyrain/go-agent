@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3、R.13.4（各自限定教学范围）**
-- 当前小节：**R.13.4 select等待与取消已验收；下一步回看并发原语适用边界，按实际缺口继续R.13，不同时布置R.14实现。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3、R.13.4、R.13.5（各自限定教学范围）**
+- 当前小节：**R.13.5 Ticker周期通知、慢处理与取消已验收；默认入口仅运行当前Ticker实验，旧实验独立测试保留。下一步R.14泛型与闭包（未开始），Once待实际场景需要时再补，不改已有SSE或生产代码。**
 
 ### R.1 最小 HTTP 服务
 
@@ -621,3 +621,21 @@
 - Git检查点：主题 `feat(concurrency): 添加 select 等待取消与任务收尾示例`；只含main.go、select_demo.go、main_test.go、select_demo_test.go、根计划与examples/README.md。核对敏感内容与暂存范围，.vscode/settings.json无diff、不强造修改，不push；实际提交哈希以Git历史为准。
 - 官方参考：https://go.dev/ref/spec（Select statements）；https://pkg.go.dev/context（Done/Err/WithTimeout/CancelFunc）；https://pkg.go.dev/time（NewTimer/Stop）；https://pkg.go.dev/sync（WaitGroup/Wait/Done）；另核对本机标准库，不用滚动文档升级依赖。
 - 下一步：按R.13现有计划回看并发原语的适用边界，再按实际缺口决定Once/Timer/Ticker是否另补小节；不因API清单预先堆生产设施，不同时布置R.14实现。
+
+#### R.13.5 Ticker周期通知、慢处理与取消
+
+- 状态：已掌握（当前周期通知/顺序模拟工作教学范围）；用户Ticker核心与聚焦入口已保存，理解确认完成，正式测试、真实入口及取消/Stop/循环反证通过。
+- 用户可见目标：已有SSE仅看到逐字发送，缺少时间通知与实际处理的独立观察；并发教学入口默认只运行快/慢两组100毫秒Ticker实验，各用650毫秒期限。显示通知相对时间与实际开始时间，快速工作20毫秒通常完成六次，慢工作250毫秒典型启动三次完成两次，看到慢接收的延迟与通知跳跃；真实时间与次数以调度为准，不把固定输出当生产保证。
+- 范围与必要性：用户新增examples/concurrency-from-scratch/ticker_demo.go，实现runTickerTask(ctx,interval,workDelay)(int,error)及runTickerDemo。原两任务逻辑已原样保留为runGoroutineDemo，main仅调用当前runTickerDemo；Mutex/channel/select函数及独立测试保持，旧行为不因默认入口聚焦而删除。Ticker核心不创建新goroutine/WaitGroup、HTTP路由、配置、通用调度器或Once；本次封装用于两组相同取消/计时流程只改工作时长，返回完成计数和错误，由演示入口分类与汇总。
+- 调用链：入口拒绝已取消ctx、校验interval大于零；创建本次Ticker并defer Stop，for循环select等待ctx或tick；tick分支再查已知取消，打印tick.Sub(started)与Since(started)的毫秒差值，NewTimer模拟本次工作并通过另一select响应取消。各路径立即Stop当前Timer，完成后再查ctx并计数；外层返回时停止Ticker。当前函数串行消费，无共享可变状态，通知不是自动业务执行。
+- 新语法与时间方法：interval,workDelay time.Duration是两个同类型参数的合写；for {}重复，select单次只选一个分支。Ticker.C类型为<-chan time.Time（只接收），tick是时间点非编号；Time.Sub另一个Time得到Duration，Milliseconds无参数返回整数毫秒并截去不足一毫秒部分，Since是当前时间减起点。completed只计模拟工作完成且未观察到取消的次数，开始序号不代表Tick全局编号。
+- Ticker边界：NewTicker周期必须大于零且构造不等待首次tick，首次通知在一个周期之后；慢接收会调整通知间隔或丢tick，不为每拍创建任务、不给每个tick无限排队，积压通知可能迟到。Stop无参数返回值，停止后续通知但不close C、不退出当前函数，也不取消ctx或正在进行的业务；现代Go未Stop的不可达Ticker可回收，显式Stop用于控制本次生命周期，不宣传必然内存泄漏。
+- 替代与取消：循环Sleep把间隔加到工作耗时之后，不能保持同一周期且Sleep不监听ctx；只在外层等tick响应取消不够，内部慢工作也要协作出口。外层select选完tick后不会在后台继续监听取消，内层select承担当前工作等待；两者顺序执行，不是同时运行的监听器。本节不用循环内defer Timer.Stop，以免直到整个函数退出才逐个执行，两个分支显式Stop。复用上一节Context与%w/Is错误归属，核心不Exit，期限是预期演示停止，不是工作失败。
+- 教材预验：此前project-only overlay验证快慢周期、取消、输入和Stop行为，旧全实验入口兼容副本虚拟3.5秒/二十七行以及test/race/vet/build/真实入口通过；预验不代替正式验收，最终入口已按本节运行范围收敛，临时材料不提交。
+- 正式测试：助手新增ticker_demo_test.go，虚拟时钟验证快速六次、慢速三次开工/两次完成，通知100/200/400毫秒与实际开始100/350/600毫秒；覆盖工作中期限/手动取消、首个tick前取消、已取消优先于非法周期、周期零/负值普通错误、工作零/负值即时完成、%w阶段错误、八次混合期限独立调用及Ticker.Stop不关闭C。默认main严格只输出本课十三行、虚拟时长1.3秒；捕获stdout测试不t.Parallel，夹具内并发等待全部调用后恢复。main_test改为直接验runGoroutineDemo，保持两秒重叠、六行/任务顺序及simulateTask边界断言，旧Mutex/channel/select正式测试原样保持。
+- 正式验证：本教学包gofmt检查、go test -mod=readonly重复十次、go test -mod=readonly -race重复三次、go vet、临时路径go build及git diff --check通过；真实go run、go run -race与实际二进制均只有Ticker快慢输出，观察到快速完成六次、慢速完成两次和通知迟到，stderr空。精确次数/时间只在虚拟时钟内断言，不将真实机器当前输出推广为固定调度保证；检查范围仅并发教学包，不宣称全仓库完成。
+- 正式反证：仅overlay实际用户核心的工作区副本，删内层取消使150毫秒停止拖至1.1秒；删外层取消使10毫秒停止等至首拍1秒；首拍完成即return丢失周期；通知字段改用Since抹去迟到差异，均被正式测试发现。测试保留Ticker引用探针，原Stop停止后续通知，删Stop在函数返回后仍发送被检测。旧两任务副本删Wait仍被独立旧测试发现耗时0和提前总结。最后无overlay race通过；用户核心、正式测试、模块与旧SSE/会话/Workflow文件哈希保持，临时材料不提交，全部临时进程结束，未启动服务。上述均为助手反证，不冒充用户独立变体。
+- 理解边界：Ticker提供周期通知，Timer在每轮新建、只模拟该份工作的一次完成；Sub是通知时间减起点，Since是当前时间减起点，不控制执行。650毫秒期限通知取消，代码return退出，defer Stop停止提醒；不是Stop导致ctx取消，也不是关闭C自动结束循环。开始次数不等完成次数，慢处理期间不并发开新工作；理解已确认，不重复考。
+- Git检查点：主题 `feat(concurrency): 添加 Ticker 周期取消示例并聚焦教学入口`；仅main.go、ticker_demo.go、main_test.go、ticker_demo_test.go、根计划及examples/README.md。核对敏感内容与暂存范围；.vscode/settings.json已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
+- 官方参考：https://pkg.go.dev/time（Ticker/NewTicker/Stop/Time.Sub/Duration.Milliseconds）；具体契约另核对本机标准库，不升级依赖。
+- 下一步：R.14泛型与闭包，先解决有具体重复的类型辅助与捕获场景，不提前实现生产功能；Once待真实初始化需求出现时再补，不按API清单堆设施。

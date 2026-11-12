@@ -13,7 +13,7 @@ func simulateTask(name string, delay time.Duration) {
 	fmt.Printf("%s：完成\n", name)
 }
 
-func main() {
+func runGoroutineDemo() {
 	started := time.Now()
 	var wg sync.WaitGroup
 
@@ -30,10 +30,9 @@ func main() {
 	fmt.Println("main：已启动两个任务，等待完成")
 	wg.Wait()
 	fmt.Printf("main：全部完成，总耗时 %.2f 秒\n", time.Since(started).Seconds())
+}
 
-	runMutexDemo()
-
-	runChannelDemo()
-
-	runSelectDemo()
+func main() {
+	// 默认聚焦当前小节；历史实验保留，分别由测试验证。
+	runTickerDemo()
 }
