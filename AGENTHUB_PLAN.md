@@ -90,8 +90,8 @@
 
 - 当前阶段：**二轮第三编：指标入门与 Go 语法就地巩固（先在教学服务验证）**
 - 当前路线决策：**旧一轮计划已关闭归档（`docs/archive/agenthub-plan-v1.md`）；二轮按缺口重新排课，R.1 起从标准库重走 HTTP。**
-- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3、R.13.4、R.13.5（各自限定教学范围）**
-- 当前小节：**R.13.5 Ticker周期通知、慢处理与取消已验收；默认入口仅运行当前Ticker实验，旧实验独立测试保留。下一步R.14泛型与闭包（未开始），Once待实际场景需要时再补，不改已有SSE或生产代码。**
+- 已掌握（二轮）：**R.1、R.2、R.3.1、R.3.2（当前教学范围）、R.4.1、R.4.2、R.5.1、R.5.2、R.6.1、R.6.2、R.7.1、R.7.2、R.7.3.1、R.7.3.2、R.7.4、R.8.1、R.8.2、R.8.3、R.9.1、R.9.2、R.10.1、R.10.2、R.11.1、R.11.2、R.12.1、R.12.2、R.13.1、R.13.2、R.13.3、R.13.4、R.13.5、R.14.1（各自限定教学范围）**
+- 当前小节：**R.14.1 泛型筛选与闭包捕获已验收；下一步对照既有Eino节点的输入/输出类型与回调执行时机（未开始）。本节仅新泛型教学包，旧并发/SSE/Workflow与生产代码保持。**
 
 ### R.1 最小 HTTP 服务
 
@@ -639,3 +639,20 @@
 - Git检查点：主题 `feat(concurrency): 添加 Ticker 周期取消示例并聚焦教学入口`；仅main.go、ticker_demo.go、main_test.go、ticker_demo_test.go、根计划及examples/README.md。核对敏感内容与暂存范围；.vscode/settings.json已核对无diff、不强造修改，不push；实际哈希以Git历史为准。
 - 官方参考：https://pkg.go.dev/time（Ticker/NewTicker/Stop/Time.Sub/Duration.Milliseconds）；具体契约另核对本机标准库，不升级依赖。
 - 下一步：R.14泛型与闭包，先解决有具体重复的类型辅助与捕获场景，不提前实现生产功能；Once待真实初始化需求出现时再补，不按API清单堆设施。
+
+#### R.14.1 泛型筛选与闭包捕获
+
+- 状态：已掌握（当前泛型筛选/同步闭包教学范围）；用户核心已保存，类型关系与闭包解释补准后确认，正式测试/真实入口及类型与捕获反证通过。
+- 用户可见目标：运行当前独立示例，整数列表按最低值筛选，最低值从3改6后复用同一闭包得到不同结果，再用同一filter筛选Go前缀字符串；输出仅三行，不混入并发旧实验。不展示新产品能力，仅将已见过的泛型与回调语法拆开观察。
+- 范围与必要性：用户新增examples/generics-from-scratch/main.go，复用根go.mod，无依赖升级或HTTP/SSE/Workflow修改；filter[T any](items []T,keep func(T)bool)[]T将不同类型列表的遍历/收集复用，规则留给具体类型回调，第二个真实示例调用为字符串。只讲一个泛型筛选辅助与闭包，不预建通用集合库、约束层、并发框架或模型。
+- 调用与数据流：main创建[]int及minimum，创建func(int)bool闭包但不执行；编译器按实参类型推导T=int，运行时filter每个元素同步调用keep，true时append到新结果，按输入顺序返回[]int。minimum改6后filter[int]显式实例化复用闭包读取当前变量；字符串例推导T=string，HasPrefix(word,prefix)决定保留，返回[]string。函数参数是规则值，不是调用结果；匿名函数return只返回bool给filter，不退出筛选循环。
+- Go语法：方括号[T any]声明类型参数，T是本次类型占位非普通变量、非运行中随元素换类型；any作为约束允许任何元素类型，不表示可对T执行任意运算，也不把输入/输出变成[]any。[]T是元素同类型的切片，非固定长度数组；var result []T零值nil可以append，没保留元素返回nil、fmt显示[]。append是内置函数，输入切片和元素，返回更新切片，须赋回result；不保证每次分配新底层数组，但本例从nil构建结果，不复用输入槽位。复制元素是浅拷贝，指针/map/slice指向的数据仍可能共享；回调自身也可有副作用，不宣称深拷贝或并发安全。
+- 闭包与替代：keepNumber匿名函数引用外层minimum变量，创建时不执行、不冻结值；同步后续改变量会影响下次判断，本例无go与共享并发写。独立int/string函数可行但重复遍历；直接main循环适合单个调用，本节因两个类型调用复用核心。泛型可写filter[int]/filter[string]或按实参推导。冻结阈值须显式复制到另一变量或作为构造参数捕获，本节不要求增加函数工厂；改为[]any会丢失同一元素类型与回调关系，[]int不能直接当[]any传。HasPrefix输入两个string返回bool且区分大小写；Contains语义是任意位置不是前缀，故不替代。
+- 教材预验：此前工作区文件列表方式test/race/vet/build、真实执行及类型/规则/捕获反证通过；预验不代替正式用户实现验收，临时材料不提交。
+- 正式测试：助手新增main_test.go共六个测试，直接调用实际filter与main；覆盖结果顺序/重复、每元素回调一次、输入槽位不变与结果独立槽位、nil/空/all/none、整数/字符串/含map的不可比较结构体、浅拷贝引用、闭包创建时未执行与后续读当前minimum、显式/推导类型一致及三行完整输出。stdout捕获测试不t.Parallel；空输入不调用回调，非空仍由调用方提供可调用规则，不把nil规则扩展为新功能。
+- 正式验证：本教学包格式检查、go test -mod=readonly重复十次、go test -mod=readonly -race重复三次、go vet、临时路径go build和git diff --check通过；实际go run、go run -race及二进制输出最低值3结果[3 5 7]、最低值6结果[7]、Go前缀结果[Go Gopher]三行，stderr空。仅当前教学包验证，不宣称全仓库测试完成。
+- 正式反证：仅project-only overlay实际main副本；[]int配func(string)bool、any约束下直接>=、append返回未使用、[]int赋给[]any均由编译拒绝。反转规则、冻结初始阈值、用items[:0]复用输入槽位均被正式测试发现；显式类型与Ja前缀工作区变体通过，仅是助手验证、不冒充独立练习。最后基础race再通过；用户main与正式测试、模块、旧并发包及既有Workflow/HTTP/指标/会话哈希保持，无服务遗留，临时脚本/二进制/overlay不提交。
+- 理解边界：本节与JS filter的流程类比成立，但Go通过编译期类型关系限制实参；any是允许的类型范围，T不是运行时逐元素识别。keepNumber读取同一个外层minimum，后续赋值改变后续判断，不是重新创建函数；T对应items元素、keep入参、返回切片元素三处，不能配不匹配的回调。概念已确认，不重复追加口试。
+- Git检查点：主题 `feat(generics): 添加泛型筛选与闭包捕获示例`；仅新教学main.go、main_test.go、根计划与examples/README.md，核对敏感内容与暂存范围。.vscode/settings.json已核对无diff，不强造修改，不push；实际哈希以Git历史为准。
+- 官方参考：https://go.dev/ref/spec（Type parameter declarations、Function types/literals、Instantiations、Type inference、Appending to slices）；https://pkg.go.dev/strings（HasPrefix）；本机编译验证按现有模块声明，不用滚动文档新增语法升级依赖。
+- 下一步：把输入/输出类型关系与回调时机对照既有Eino NewWorkflow/InvokableLambda，再决定下一小节，不提前要求接模型或生产设施。
